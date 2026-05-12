@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
 	"strings"
 	"time"
 
@@ -15,7 +14,7 @@ import (
 )
 
 type CloudFormationService interface {
-	Deploy(ctx context.Context, input *DeployInput) (*DeployOutput, error)
+	Deploy(ctx context.Context, input *DeployInput, timeout time.Duration) (*DeployOutput, error)
 	StackExists(ctx context.Context, stackName string) (bool, error)
 }
 
@@ -26,6 +25,7 @@ type cloudFormationService struct {
 type CloudFormationClient interface {
 	CreateChangeSet(context.Context, *cloudformation.CreateChangeSetInput, ...func(*cloudformation.Options)) (*cloudformation.CreateChangeSetOutput, error)
 	CreateStack(context.Context, *cloudformation.CreateStackInput, ...func(*cloudformation.Options)) (*cloudformation.CreateStackOutput, error)
+	DeleteChangeSet(context.Context, *cloudformation.DeleteChangeSetInput, ...func(*cloudformation.Options)) (*cloudformation.DeleteChangeSetOutput, error)
 	DescribeChangeSet(context.Context, *cloudformation.DescribeChangeSetInput, ...func(*cloudformation.Options)) (*cloudformation.DescribeChangeSetOutput, error)
 	DescribeStacks(context.Context, *cloudformation.DescribeStacksInput, ...func(*cloudformation.Options)) (*cloudformation.DescribeStacksOutput, error)
 	ExecuteChangeSet(context.Context, *cloudformation.ExecuteChangeSetInput, ...func(*cloudformation.Options)) (*cloudformation.ExecuteChangeSetOutput, error)
@@ -336,7 +336,7 @@ func (d *DeployInput) AsExecuteChangeSetInput() *cloudformation.ExecuteChangeSet
 type DeployOutput struct {
 }
 
-func (s *cloudFormationService) Deploy(ctx context.Context, input *DeployInput) (*DeployOutput, error) {
+func (s *cloudFormationService) Deploy(ctx context.Context, input *DeployInput, timeout time.Duration) (*DeployOutput, error) {
 	if input.StackName == nil {
 		return nil, fmt.Errorf("stack name is required")
 	}
@@ -360,36 +360,34 @@ func (s *cloudFormationService) Deploy(ctx context.Context, input *DeployInput) 
 
 	createChangeSetInput := input.AsCreateCreateChangeSetInput(changeSetType)
 	// TODO: make this an option
-	waitTimeout := time.Minute * 15
+	waitTimeout := timeout
 
-	// _, err = s.client.CreateChangeSet(ctx, createChangeSetInput)
-	// if err != nil {
-	// 	return nil, err
-	// }
-
-	// waiter := cloudformation.NewChangeSetCreateCompleteWaiter(s.client)
-
-	// output, err := waiter.WaitForOutput(ctx, &cloudformation.DescribeChangeSetInput{
-	// 	ChangeSetName: input.DeploymentName,
-	// 	StackName:     input.StackName,
-	// }, waitTimeout)
-
-	// if output.Status == types.ChangeSetStatusFailed {
-	// 	if output.StatusReason != nil && strings.Contains(*output.StatusReason, "No changes to be made") {
-	// 		// TODO: Handle case where there's no change to the stack
-	// 		// should actually delete the old changeset because there is a limit to how many unexecuted
-	// 		// changesets you can have
-
-	// 		return &DeployOutput{}, nil
-
-	// 	}
-
-	// 	return nil, fmt.Errorf("failed to create changeset: %s", *output.StatusReason)
-	// }
-
-	_, err = s.createChangeSetAndWait(ctx, createChangeSetInput, waitTimeout, true)
+	_, err = s.createChangeSetAndWait(ctx, createChangeSetInput, waitTimeout)
 	if err != nil {
-		return nil, fmt.Errorf("failedto create changeset %s: %w", *input.DeploymentName, err)
+		if strings.Contains(err.Error(), "waiter state transitioned to Failure") {
+			isEmpty, err := s.isEmptyChangeSet(ctx, &cloudformation.DescribeChangeSetInput{
+				StackName:     input.StackName,
+				ChangeSetName: input.DeploymentName,
+			})
+
+			if err != nil {
+				return nil, err
+			}
+
+			if isEmpty {
+				_, err := s.client.DeleteChangeSet(ctx, &cloudformation.DeleteChangeSetInput{
+
+					StackName:     input.StackName,
+					ChangeSetName: input.DeploymentName,
+				})
+
+				if err != nil {
+					return nil, err
+				}
+			}
+		} else {
+			return nil, fmt.Errorf("failedto create changeset %s: %w", *input.DeploymentName, err)
+		}
 	}
 
 	_, err = s.client.ExecuteChangeSet(ctx, input.AsExecuteChangeSetInput())
@@ -397,6 +395,8 @@ func (s *cloudFormationService) Deploy(ctx context.Context, input *DeployInput) 
 		return nil, fmt.Errorf("failed to execute changeset %s: %w", *input.DeploymentName, err)
 	}
 
+	// TODO: need to switch between NewStackCreateCompleteWaiter and NewStackUpdateCompleteWaiter
+	// depending on whether we're creating or updating.
 	executeChangeSetWaiter := cloudformation.NewStackUpdateCompleteWaiter(s.client)
 	if err := executeChangeSetWaiter.Wait(ctx, &cloudformation.DescribeStacksInput{
 		StackName: input.StackName,
@@ -427,35 +427,32 @@ func (s *cloudFormationService) StackExists(ctx context.Context, stackName strin
 	return true, nil
 }
 
-func (s *cloudFormationService) createChangeSetAndWait(ctx context.Context, input *cloudformation.CreateChangeSetInput, timeout time.Duration, ignoreEmptyChangeSet bool) (*cloudformation.DescribeChangeSetOutput, error) {
+func (s *cloudFormationService) createChangeSetAndWait(ctx context.Context, input *cloudformation.CreateChangeSetInput, timeout time.Duration) (*cloudformation.DescribeChangeSetOutput, error) {
 	_, err := s.client.CreateChangeSet(ctx, input)
 	if err != nil {
 		return nil, err
 	}
 
 	waiter := cloudformation.NewChangeSetCreateCompleteWaiter(s.client)
-
-	output, err := waiter.WaitForOutput(ctx, &cloudformation.DescribeChangeSetInput{
+	params := &cloudformation.DescribeChangeSetInput{
 		ChangeSetName: input.ChangeSetName,
 		StackName:     input.StackName,
-	}, timeout)
+	}
 
+	return waiter.WaitForOutput(ctx, params, timeout)
+}
+
+func (s *cloudFormationService) isEmptyChangeSet(ctx context.Context, input *cloudformation.DescribeChangeSetInput) (bool, error) {
+	output, err := s.client.DescribeChangeSet(ctx, input)
 	if err != nil {
-		return nil, err
+		return false, err
 	}
 
-	log.Printf("output: %+v", output)
-
-	if ignoreEmptyChangeSet &&
-		output.Status == types.ChangeSetStatusFailed &&
+	if output.Status == types.ChangeSetStatusFailed &&
 		output.StatusReason != nil &&
-		strings.Contains(*output.StatusReason, "No changes to be made") {
-		// TODO: Handle case where there's no change to the stack
-		// should actually delete the old changeset because there is a limit to how many unexecuted
-		// changesets you can have
-
-		return output, nil
+		strings.Contains(*output.StatusReason, "The submitted information didn't contain changes") {
+		return true, nil
 	}
 
-	return output, err
+	return false, nil
 }
