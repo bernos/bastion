@@ -14,7 +14,7 @@ import (
 )
 
 type CloudFormationService interface {
-	Deploy(ctx context.Context, input *DeployInput, timeout time.Duration) (*DeployOutput, error)
+	Deploy(ctx context.Context, input *DeployInput, opts ...func(*DeployOptions)) (*DeployOutput, error)
 	StackExists(ctx context.Context, stackName string) (bool, error)
 }
 
@@ -333,36 +333,54 @@ func (d *DeployInput) AsExecuteChangeSetInput() *cloudformation.ExecuteChangeSet
 	}
 }
 
-type DeployOutput struct {
+func (d *DeployInput) AsDescribeStacksInput() *cloudformation.DescribeStacksInput {
+	return &cloudformation.DescribeStacksInput{
+		StackName: d.StackName,
+	}
 }
 
-func (s *cloudFormationService) Deploy(ctx context.Context, input *DeployInput, timeout time.Duration) (*DeployOutput, error) {
-	if input.StackName == nil {
-		return nil, fmt.Errorf("stack name is required")
+func (d *DeployInput) Validate() error {
+	if d.StackName == nil {
+		return fmt.Errorf("DeployInput.StackName is required")
 	}
 
-	if input.DeploymentName == nil {
-		return nil, fmt.Errorf("deployment name is required")
+	if d.DeploymentName == nil {
+		return fmt.Errorf("DeployInput.DeploymentName is required")
 	}
 
-	stackExists, err := s.StackExists(ctx, *input.StackName)
+	return nil
+}
+
+type DeployOutput struct {
+	CreateChangeSetInput *cloudformation.CreateChangeSetInput
+	Changes              []types.Change
+}
+
+type DeployOptions struct {
+	Timeout time.Duration
+}
+
+func (s *cloudFormationService) Deploy(ctx context.Context, input *DeployInput, opts ...func(*DeployOptions)) (*DeployOutput, error) {
+	if err := input.Validate(); err != nil {
+		return nil, err
+	}
+
+	o := &DeployOptions{
+		Timeout: time.Minute * 15,
+	}
+
+	for _, opt := range opts {
+		opt(o)
+	}
+
+	changeSetType, err := s.calculateChangeSetType(ctx, input)
 	if err != nil {
 		return nil, err
 	}
 
-	var changeSetType types.ChangeSetType
-
-	if stackExists {
-		changeSetType = types.ChangeSetTypeUpdate
-	} else {
-		changeSetType = types.ChangeSetTypeCreate
-	}
-
 	createChangeSetInput := input.AsCreateCreateChangeSetInput(changeSetType)
-	// TODO: make this an option
-	waitTimeout := timeout
 
-	_, err = s.createChangeSetAndWait(ctx, createChangeSetInput, waitTimeout)
+	describeChangeSetOutput, err := s.createChangeSetAndWait(ctx, createChangeSetInput, o.Timeout)
 	if err != nil {
 		if strings.Contains(err.Error(), "waiter state transitioned to Failure") {
 			isEmpty, err := s.isEmptyChangeSet(ctx, &cloudformation.DescribeChangeSetInput{
@@ -374,9 +392,10 @@ func (s *cloudFormationService) Deploy(ctx context.Context, input *DeployInput, 
 				return nil, err
 			}
 
+			// If the changeset was empty, clean up after ourselves and then just
+			// return successfully
 			if isEmpty {
 				_, err := s.client.DeleteChangeSet(ctx, &cloudformation.DeleteChangeSetInput{
-
 					StackName:     input.StackName,
 					ChangeSetName: input.DeploymentName,
 				})
@@ -384,31 +403,29 @@ func (s *cloudFormationService) Deploy(ctx context.Context, input *DeployInput, 
 				if err != nil {
 					return nil, err
 				}
+
+				return &DeployOutput{
+					CreateChangeSetInput: createChangeSetInput,
+					Changes:              []types.Change{},
+				}, nil
 			}
 		} else {
-			return nil, fmt.Errorf("failedto create changeset %s: %w", *input.DeploymentName, err)
+			return nil, fmt.Errorf("failed to create changeset %s: %w", *input.DeploymentName, err)
 		}
 	}
 
-	_, err = s.client.ExecuteChangeSet(ctx, input.AsExecuteChangeSetInput())
+	_, err = s.executeChangeSetAndWait(ctx, input.AsExecuteChangeSetInput(), changeSetType, o.Timeout)
 	if err != nil {
 		return nil, fmt.Errorf("failed to execute changeset %s: %w", *input.DeploymentName, err)
 	}
 
-	// TODO: need to switch between NewStackCreateCompleteWaiter and NewStackUpdateCompleteWaiter
-	// depending on whether we're creating or updating.
-	executeChangeSetWaiter := cloudformation.NewStackUpdateCompleteWaiter(s.client)
-	if err := executeChangeSetWaiter.Wait(ctx, &cloudformation.DescribeStacksInput{
-		StackName: input.StackName,
-	}, waitTimeout); err != nil {
-		return nil, fmt.Errorf("failed while waiting for changeset to execute: %w", err)
-	}
-
-	return &DeployOutput{}, nil
+	return &DeployOutput{
+		CreateChangeSetInput: createChangeSetInput,
+		Changes:              describeChangeSetOutput.Changes,
+	}, nil
 }
 
 func (s *cloudFormationService) StackExists(ctx context.Context, stackName string) (bool, error) {
-
 	_, err := s.client.DescribeStacks(ctx, &cloudformation.DescribeStacksInput{
 		StackName: aws.String(stackName),
 	})
@@ -421,10 +438,23 @@ func (s *cloudFormationService) StackExists(ctx context.Context, stackName strin
 			}
 		}
 
-		return false, err // just return the error
+		return false, err
 	}
 
 	return true, nil
+}
+
+func (s *cloudFormationService) calculateChangeSetType(ctx context.Context, input *DeployInput) (types.ChangeSetType, error) {
+	stackExists, err := s.StackExists(ctx, *input.StackName)
+	if err != nil {
+		return types.ChangeSetTypeCreate, err
+	}
+
+	if stackExists {
+		return types.ChangeSetTypeUpdate, nil
+	}
+
+	return types.ChangeSetTypeCreate, nil
 }
 
 func (s *cloudFormationService) createChangeSetAndWait(ctx context.Context, input *cloudformation.CreateChangeSetInput, timeout time.Duration) (*cloudformation.DescribeChangeSetOutput, error) {
@@ -440,6 +470,29 @@ func (s *cloudFormationService) createChangeSetAndWait(ctx context.Context, inpu
 	}
 
 	return waiter.WaitForOutput(ctx, params, timeout)
+}
+
+func (s *cloudFormationService) executeChangeSetAndWait(ctx context.Context, input *cloudformation.ExecuteChangeSetInput, changeSetType types.ChangeSetType, timeout time.Duration) (*cloudformation.DescribeStacksOutput, error) {
+
+	_, err := s.client.ExecuteChangeSet(ctx, input)
+	if err != nil {
+		return nil, err
+	}
+
+	describeStackInput := &cloudformation.DescribeStacksInput{
+		StackName: input.StackName,
+	}
+
+	switch changeSetType {
+	case types.ChangeSetTypeUpdate:
+		w := cloudformation.NewStackUpdateCompleteWaiter(s.client)
+		return w.WaitForOutput(ctx, describeStackInput, timeout)
+	case types.ChangeSetTypeCreate:
+		w := cloudformation.NewStackCreateCompleteWaiter(s.client)
+		return w.WaitForOutput(ctx, describeStackInput, timeout)
+	}
+
+	return nil, fmt.Errorf("unsupported change set type: %s", changeSetType)
 }
 
 func (s *cloudFormationService) isEmptyChangeSet(ctx context.Context, input *cloudformation.DescribeChangeSetInput) (bool, error) {
