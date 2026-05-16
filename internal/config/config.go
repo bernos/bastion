@@ -14,7 +14,9 @@ const (
 )
 
 type Config struct {
-	Name string
+	Name     string
+	SubnetID string `mapstructure:"subnet-id"`
+	VPCID    string `mapstructure:"vpc-id"`
 }
 
 func Initialize(cfg *Config, cmd *cobra.Command, cfgFile string) error {

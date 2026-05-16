@@ -7,6 +7,7 @@ import (
 	_ "embed"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/cloudformation/types"
 	"github.com/bernos/bastion/pkg/aws/cloudformationservice"
 	gonanoid "github.com/matoous/go-nanoid/v2"
 )
@@ -56,10 +57,29 @@ func (svc *bastionService) DeployBastion(ctx context.Context, input *DeployBasti
 	stackName := fmt.Sprintf("%s-stack", input.BastionName)
 	deploymentName := fmt.Sprintf("%s-%s", input.BastionName, id)
 
+	amiParam := input.AMIParameterName
+	if amiParam == "" {
+		amiParam = "/aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-x86_64-gp2"
+	}
+
+	instanceType := input.InstanceType
+	if instanceType == "" {
+		instanceType = "t3.micro"
+	}
+
 	_, err = svc.cloudFormationService.Deploy(ctx, &cloudformationservice.DeployInput{
 		StackName:      aws.String(stackName),
 		DeploymentName: aws.String(deploymentName),
 		TemplateBody:   aws.String(stackTemplate),
+		Capabilities:   []types.Capability{types.CapabilityCapabilityIam},
+		Parameters: []types.Parameter{
+			{ParameterKey: aws.String("SubnetId"), ParameterValue: aws.String(input.SubnetID)},
+			{ParameterKey: aws.String("VpcId"), ParameterValue: aws.String(input.VPCID)},
+			{ParameterKey: aws.String("InstanceType"), ParameterValue: aws.String(instanceType)},
+			{ParameterKey: aws.String("AmiId"), ParameterValue: aws.String(amiParam)},
+			{ParameterKey: aws.String("BastionName"), ParameterValue: aws.String(input.BastionName)},
+			{ParameterKey: aws.String("Owner"), ParameterValue: aws.String(input.Owner)},
+		},
 	})
 
 	if err != nil {
