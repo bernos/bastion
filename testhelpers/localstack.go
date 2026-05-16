@@ -12,7 +12,7 @@ import (
 )
 
 func StartLocalStack(ctx context.Context) (aws.Config, *localstack.LocalStackContainer, error) {
-	container, err := localstack.Run(ctx, "localstack/localstack:1.4.0")
+	container, err := localstack.Run(ctx, "localstack/localstack:3.8")
 	if err != nil {
 		return aws.Config{}, nil, fmt.Errorf("failed to start localstack container: %w", err)
 	}

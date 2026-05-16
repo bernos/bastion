@@ -2,7 +2,6 @@ package cloudformationservice
 
 import (
 	"context"
-	_ "embed"
 	"fmt"
 	"testing"
 
@@ -11,9 +10,6 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/cloudformation/types"
 	"github.com/aws/smithy-go"
 )
-
-//go:embed testdata/stack.yaml
-var stackTemplate string
 
 func Test_CloudFormationService_Deploy(t *testing.T) {
 	cases := []struct {
