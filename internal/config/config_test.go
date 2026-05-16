@@ -29,11 +29,17 @@ func writeTempConfig(t *testing.T, content string) string {
 	return f
 }
 
-// reset clears Viper's global state before and after each test.
+// reset clears Viper's global state and redirects the user config dir to an
+// empty temp dir before and after each test. The redirect prevents Viper's
+// automatic config-file search from picking up a real config file from the
+// developer's machine. XDG_CONFIG_HOME covers Linux; HOME covers macOS.
 func reset(t *testing.T) {
 	t.Helper()
 	viper.Reset()
 	t.Cleanup(viper.Reset)
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+	t.Setenv("HOME", tmp)
 }
 
 func TestInitialize_FromConfigFile(t *testing.T) {
@@ -84,9 +90,15 @@ func TestInitialize_FromEnvVars(t *testing.T) {
 func TestInitialize_FromFlags(t *testing.T) {
 	reset(t)
 	cmd := newTestCmd()
-	_ = cmd.Flags().Set("name", "flag-name")
-	_ = cmd.Flags().Set("subnet-id", "subnet-from-flag")
-	_ = cmd.Flags().Set("vpc-id", "vpc-from-flag")
+	if err := cmd.Flags().Set("name", "flag-name"); err != nil {
+		t.Fatal(err)
+	}
+	if err := cmd.Flags().Set("subnet-id", "subnet-from-flag"); err != nil {
+		t.Fatal(err)
+	}
+	if err := cmd.Flags().Set("vpc-id", "vpc-from-flag"); err != nil {
+		t.Fatal(err)
+	}
 
 	cfg := &config.Config{}
 	if err := config.Initialize(cfg, cmd, ""); err != nil {
@@ -111,9 +123,15 @@ func TestInitialize_Precedence_FlagsOverEnv(t *testing.T) {
 	t.Setenv("BASTION_VPC_ID", "vpc-from-env")
 
 	cmd := newTestCmd()
-	_ = cmd.Flags().Set("name", "flag-name")
-	_ = cmd.Flags().Set("subnet-id", "subnet-from-flag")
-	_ = cmd.Flags().Set("vpc-id", "vpc-from-flag")
+	if err := cmd.Flags().Set("name", "flag-name"); err != nil {
+		t.Fatal(err)
+	}
+	if err := cmd.Flags().Set("subnet-id", "subnet-from-flag"); err != nil {
+		t.Fatal(err)
+	}
+	if err := cmd.Flags().Set("vpc-id", "vpc-from-flag"); err != nil {
+		t.Fatal(err)
+	}
 
 	cfg := &config.Config{}
 	if err := config.Initialize(cfg, cmd, ""); err != nil {
@@ -139,9 +157,15 @@ subnet-id: subnet-from-file
 vpc-id: vpc-from-file
 `)
 	cmd := newTestCmd()
-	_ = cmd.Flags().Set("name", "flag-name")
-	_ = cmd.Flags().Set("subnet-id", "subnet-from-flag")
-	_ = cmd.Flags().Set("vpc-id", "vpc-from-flag")
+	if err := cmd.Flags().Set("name", "flag-name"); err != nil {
+		t.Fatal(err)
+	}
+	if err := cmd.Flags().Set("subnet-id", "subnet-from-flag"); err != nil {
+		t.Fatal(err)
+	}
+	if err := cmd.Flags().Set("vpc-id", "vpc-from-flag"); err != nil {
+		t.Fatal(err)
+	}
 
 	cfg := &config.Config{}
 	if err := config.Initialize(cfg, cmd, cfgFile); err != nil {
@@ -190,13 +214,6 @@ vpc-id: vpc-from-file
 // given and none is found during automatic search, Initialize succeeds.
 func TestInitialize_NoConfigFile_NoError(t *testing.T) {
 	reset(t)
-	// Redirect the user config dir to an empty temp dir so Viper's automatic
-	// search does not pick up a real config file from the developer's machine.
-	// XDG_CONFIG_HOME is used on Linux; HOME covers the macOS fallback path.
-	tmp := t.TempDir()
-	t.Setenv("XDG_CONFIG_HOME", tmp)
-	t.Setenv("HOME", tmp)
-
 	cfg := &config.Config{}
 	if err := config.Initialize(cfg, newTestCmd(), ""); err != nil {
 		t.Errorf("expected no error when no config file exists, got: %v", err)
