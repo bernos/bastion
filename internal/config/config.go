@@ -14,6 +14,7 @@ const (
 
 type Config struct {
 	Name     string `mapstructure:"name"`
+	Owner    string `mapstructure:"owner"`
 	SubnetID string `mapstructure:"subnet-id"`
 	VPCID    string `mapstructure:"vpc-id"`
 }

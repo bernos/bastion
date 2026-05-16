@@ -7,13 +7,16 @@ import (
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/cloudformation"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
+	"github.com/bernos/bastion/internal/bastion"
 	"github.com/bernos/bastion/internal/config"
+	"github.com/bernos/bastion/pkg/aws/cloudformationservice"
 )
 
 type Dependencies struct {
 	awsConfig            *aws.Config
 	cloudFormationClient *cloudformation.Client
 	stsClient            *sts.Client
+	bastionService       bastion.BastionService
 }
 
 func New(cfg *config.Config) *Dependencies {
@@ -48,6 +51,18 @@ func (d *Dependencies) CloudFormationClient(ctx context.Context) (*cloudformatio
 	d.cloudFormationClient = cloudformation.NewFromConfig(c)
 
 	return d.cloudFormationClient, nil
+}
+
+func (d *Dependencies) BastionService(ctx context.Context) (bastion.BastionService, error) {
+	if d.bastionService != nil {
+		return d.bastionService, nil
+	}
+	cfnClient, err := d.CloudFormationClient(ctx)
+	if err != nil {
+		return nil, err
+	}
+	d.bastionService = bastion.NewBastionService(cloudformationservice.New(cfnClient))
+	return d.bastionService, nil
 }
 
 func (d *Dependencies) STSClient(ctx context.Context) (*sts.Client, error) {
