@@ -1,60 +1,93 @@
 AWSTemplateFormatVersion: 2010-09-09
-Description: CloudFormation Template for WebServer with Security Group and EC2 Instance
+Description: Bastion host — private EC2 instance accessible via SSM Session Manager and EC2 Instance Connect Endpoint
 
 Parameters:
-  LatestAmiId:
-    Description: The latest Amazon Linux 2 AMI from the Parameter Store
-    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
-    Default: '/aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-x86_64-gp2'
+  SubnetId:
+    Description: Private subnet in which to launch the bastion instance
+    Type: AWS::EC2::Subnet::Id
+
+  VpcId:
+    Description: VPC in which to create the bastion security group
+    Type: AWS::EC2::VPC::Id
 
   InstanceType:
-    Description: WebServer EC2 instance type
+    Description: EC2 instance type
     Type: String
-    Default: t2.micro
+    Default: t3.micro
     AllowedValues:
       - t3.micro
-      - t2.micro
-    ConstraintDescription: must be a valid EC2 instance type.
-    
-  # MyIP:
-  #   Description: Your IP address in CIDR format (e.g. 203.0.113.1/32).
-  #   Type: String
-  #   MinLength: '9'
-  #   MaxLength: '18'
-  #   Default: 0.0.0.0/0
-  #   AllowedPattern: '^(\d{1,3}\.){3}\d{1,3}\/\d{1,2}$'
-  #   ConstraintDescription: must be a valid IP CIDR range of the form x.x.x.x/x.
+      - t3.small
+      - t3.medium
+
+  AmiId:
+    Description: SSM parameter path for the bastion AMI
+    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+    Default: /aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-x86_64-gp2
+
+  BastionName:
+    Description: Name for the bastion host and associated resources
+    Type: String
+
+  Owner:
+    Description: Owner tag value applied to all resources
+    Type: String
+    Default: ''
 
 Resources:
-  WebServerSecurityGroup:
+  BastionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+      Tags:
+        - Key: Name
+          Value: !Ref BastionName
+        - Key: Owner
+          Value: !Ref Owner
+
+  BastionInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles:
+        - !Ref BastionRole
+
+  BastionSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
-      GroupDescription: Allow HTTP access via my IP address
-      SecurityGroupIngress:
-        - IpProtocol: tcp
-          FromPort: 80
-          ToPort: 80
-          CidrIp: !Ref MyIP
+      GroupDescription: Bastion host — no inbound rules required (SSM and EICE handle access)
+      VpcId: !Ref VpcId
+      Tags:
+        - Key: Name
+          Value: !Ref BastionName
+        - Key: Owner
+          Value: !Ref Owner
 
-  # WebServer:
-  #   Type: AWS::EC2::Instance
-  #   Properties:
-  #     ImageId: !Ref LatestAmiId
-  #     InstanceType: !Ref InstanceType
-  #     SecurityGroupIds:
-  #       - !Ref WebServerSecurityGroup
-  #     UserData: !Base64 |
-  #       #!/bin/bash
-  #       yum update -y
-  #       yum install -y httpd
-  #       systemctl start httpd
-  #       systemctl enable httpd
-  #       echo "<html><body><h1>Hello World!</h1></body></html>" > /var/www/html/index.html
+  BastionInstance:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: !Ref AmiId
+      InstanceType: !Ref InstanceType
+      IamInstanceProfile: !Ref BastionInstanceProfile
+      NetworkInterfaces:
+        - DeviceIndex: '0'
+          SubnetId: !Ref SubnetId
+          GroupSet:
+            - !Ref BastionSecurityGroup
+          AssociatePublicIpAddress: false
+      Tags:
+        - Key: Name
+          Value: !Ref BastionName
+        - Key: Owner
+          Value: !Ref Owner
 
 Outputs:
-  # WebsiteURL:
-  #   Value: !Join
-  #     - ''
-  #     - - http://
-  #       - !GetAtt WebServer.PublicDnsName
-  #   Description: Website URL 
+  InstanceId:
+    Value: !Ref BastionInstance
+    Description: Bastion EC2 instance ID — use with aws ssm start-session or ec2-instance-connect

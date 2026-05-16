@@ -43,7 +43,19 @@ func NewUpCommand(cfg *config.Config) (*cobra.Command, error) {
 		},
 	}
 
-	cmd.Flags().String("name", "", "the name")
+	cmd.Flags().String("name", "", "name for the bastion host and associated resources")
+	cmd.Flags().String("subnet-id", "", "private subnet ID in which to launch the bastion instance")
+	cmd.Flags().String("vpc-id", "", "VPC ID for the bastion security group")
+
+	if err := cmd.MarkFlagRequired("name"); err != nil {
+		return nil, err
+	}
+	if err := cmd.MarkFlagRequired("subnet-id"); err != nil {
+		return nil, err
+	}
+	if err := cmd.MarkFlagRequired("vpc-id"); err != nil {
+		return nil, err
+	}
 
 	return cmd, nil
 }
