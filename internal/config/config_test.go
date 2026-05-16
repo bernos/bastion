@@ -14,6 +14,7 @@ import (
 func newTestCmd() *cobra.Command {
 	cmd := &cobra.Command{Use: "test"}
 	cmd.Flags().String("name", "", "")
+	cmd.Flags().String("owner", "", "")
 	cmd.Flags().String("subnet-id", "", "")
 	cmd.Flags().String("vpc-id", "", "")
 	return cmd
@@ -32,6 +33,7 @@ func writeTempConfig(t *testing.T, content string) string {
 func TestInitialize_FromConfigFile(t *testing.T) {
 	cfgFile := writeTempConfig(t, `
 name: file-name
+owner: owner-from-file
 subnet-id: subnet-from-file
 vpc-id: vpc-from-file
 `)
@@ -46,6 +48,9 @@ vpc-id: vpc-from-file
 	if cfg.Name != "file-name" {
 		t.Errorf("Name: want %q, got %q", "file-name", cfg.Name)
 	}
+	if cfg.Owner != "owner-from-file" {
+		t.Errorf("Owner: want %q, got %q", "owner-from-file", cfg.Owner)
+	}
 	if cfg.SubnetID != "subnet-from-file" {
 		t.Errorf("SubnetID: want %q, got %q", "subnet-from-file", cfg.SubnetID)
 	}
@@ -56,6 +61,7 @@ vpc-id: vpc-from-file
 
 func TestInitialize_FromEnvVars(t *testing.T) {
 	t.Setenv("BASTION_NAME", "env-name")
+	t.Setenv("BASTION_OWNER", "owner-from-env")
 	t.Setenv("BASTION_SUBNET_ID", "subnet-from-env")
 	t.Setenv("BASTION_VPC_ID", "vpc-from-env")
 
@@ -66,6 +72,9 @@ func TestInitialize_FromEnvVars(t *testing.T) {
 
 	if cfg.Name != "env-name" {
 		t.Errorf("Name: want %q, got %q", "env-name", cfg.Name)
+	}
+	if cfg.Owner != "owner-from-env" {
+		t.Errorf("Owner: want %q, got %q", "owner-from-env", cfg.Owner)
 	}
 	if cfg.SubnetID != "subnet-from-env" {
 		t.Errorf("SubnetID: want %q, got %q", "subnet-from-env", cfg.SubnetID)
@@ -78,6 +87,9 @@ func TestInitialize_FromEnvVars(t *testing.T) {
 func TestInitialize_FromFlags(t *testing.T) {
 	cmd := newTestCmd()
 	if err := cmd.Flags().Set("name", "flag-name"); err != nil {
+		t.Fatal(err)
+	}
+	if err := cmd.Flags().Set("owner", "owner-from-flag"); err != nil {
 		t.Fatal(err)
 	}
 	if err := cmd.Flags().Set("subnet-id", "subnet-from-flag"); err != nil {
@@ -94,6 +106,9 @@ func TestInitialize_FromFlags(t *testing.T) {
 
 	if cfg.Name != "flag-name" {
 		t.Errorf("Name: want %q, got %q", "flag-name", cfg.Name)
+	}
+	if cfg.Owner != "owner-from-flag" {
+		t.Errorf("Owner: want %q, got %q", "owner-from-flag", cfg.Owner)
 	}
 	if cfg.SubnetID != "subnet-from-flag" {
 		t.Errorf("SubnetID: want %q, got %q", "subnet-from-flag", cfg.SubnetID)
