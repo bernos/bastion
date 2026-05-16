@@ -45,7 +45,9 @@ type DeployBastionInput struct {
 }
 
 type DeployBastionOutput struct {
-	StackName string
+	StackName        string
+	InstanceID       string
+	AvailabilityZone string
 }
 
 func (svc *bastionService) DeployBastion(ctx context.Context, input *DeployBastionInput) (*DeployBastionOutput, error) {
@@ -67,7 +69,7 @@ func (svc *bastionService) DeployBastion(ctx context.Context, input *DeployBasti
 		instanceType = "t3.micro"
 	}
 
-	_, err = svc.cloudFormationService.Deploy(ctx, &cloudformationservice.DeployInput{
+	out, err := svc.cloudFormationService.Deploy(ctx, &cloudformationservice.DeployInput{
 		StackName:      aws.String(stackName),
 		DeploymentName: aws.String(deploymentName),
 		TemplateBody:   aws.String(stackTemplate),
@@ -86,7 +88,14 @@ func (svc *bastionService) DeployBastion(ctx context.Context, input *DeployBasti
 		return nil, fmt.Errorf("failed to deploy bastion: %w", err)
 	}
 
-	return &DeployBastionOutput{
-		StackName: stackName,
-	}, nil
+	result := &DeployBastionOutput{StackName: stackName}
+	for _, o := range out.Outputs {
+		switch aws.ToString(o.OutputKey) {
+		case "InstanceId":
+			result.InstanceID = aws.ToString(o.OutputValue)
+		case "AvailabilityZone":
+			result.AvailabilityZone = aws.ToString(o.OutputValue)
+		}
+	}
+	return result, nil
 }

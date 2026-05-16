@@ -1,7 +1,8 @@
 package main
 
 import (
-	"fmt"
+	"encoding/json"
+	"os"
 
 	"github.com/bernos/bastion/internal/bastion"
 	"github.com/bernos/bastion/internal/config"
@@ -33,8 +34,15 @@ func NewUpCommand(cfg *config.Config) (*cobra.Command, error) {
 				return err
 			}
 
-			fmt.Printf("Bastion deployed. Stack: %s\n", out.StackName)
-			return nil
+			return json.NewEncoder(os.Stdout).Encode(struct {
+				StackName        string `json:"stackName"`
+				InstanceID       string `json:"instanceId"`
+				AvailabilityZone string `json:"availabilityZone"`
+			}{
+				StackName:        out.StackName,
+				InstanceID:       out.InstanceID,
+				AvailabilityZone: out.AvailabilityZone,
+			})
 		},
 	}
 

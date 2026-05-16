@@ -98,16 +98,13 @@ func TestBastionService_DeployBastion(t *testing.T) {
 		t.Errorf("want stack name %q, got %q", name+"-stack", out.StackName)
 	}
 
-	stacks, err := cfnClient.DescribeStacks(ctx, &cloudformation.DescribeStacksInput{
-		StackName: aws.String(out.StackName),
-	})
-	if err != nil {
-		t.Fatalf("describe stacks: %v", err)
+	if out.InstanceID == "" {
+		t.Error("expected InstanceID to be non-empty")
 	}
 
-	if len(stacks.Stacks) != 1 {
-		t.Fatalf("expected 1 stack, got %d", len(stacks.Stacks))
+	if out.AvailabilityZone == "" {
+		t.Error("expected AvailabilityZone to be non-empty")
 	}
 
-	t.Logf("stack status: %s", stacks.Stacks[0].StackStatus)
+	t.Logf("instance ID: %s, AZ: %s", out.InstanceID, out.AvailabilityZone)
 }

@@ -11,13 +11,26 @@ import (
 	"github.com/aws/smithy-go"
 )
 
+func outputByKey(outputs []types.Output) map[string]string {
+	m := make(map[string]string, len(outputs))
+	for _, o := range outputs {
+		m[aws.ToString(o.OutputKey)] = aws.ToString(o.OutputValue)
+	}
+	return m
+}
+
 func Test_CloudFormationService_Deploy(t *testing.T) {
 	cases := []struct {
-		name      string
-		setupMock func(*mockCloudFormationClient)
+		name        string
+		setupMock   func(*mockCloudFormationClient)
+		wantOutputs map[string]string
 	}{
 		{
 			name: "create happy path",
+			wantOutputs: map[string]string{
+				"InstanceId":       "i-create001",
+				"AvailabilityZone": "us-east-1a",
+			},
 			setupMock: func(m *mockCloudFormationClient) {
 				executeChangeSetCalled := false
 
@@ -40,6 +53,10 @@ func Test_CloudFormationService_Deploy(t *testing.T) {
 							Stacks: []types.Stack{
 								{
 									StackStatus: types.StackStatusCreateComplete,
+									Outputs: []types.Output{
+										{OutputKey: aws.String("InstanceId"), OutputValue: aws.String("i-create001")},
+										{OutputKey: aws.String("AvailabilityZone"), OutputValue: aws.String("us-east-1a")},
+									},
 								},
 							},
 						}, nil
@@ -60,8 +77,11 @@ func Test_CloudFormationService_Deploy(t *testing.T) {
 
 		{
 			name: "update happy path",
+			wantOutputs: map[string]string{
+				"InstanceId":       "i-update001",
+				"AvailabilityZone": "us-east-1b",
+			},
 			setupMock: func(m *mockCloudFormationClient) {
-
 				m.CreateChangeSetFn = func(ctx context.Context, input *cloudformation.CreateChangeSetInput, o ...func(*cloudformation.Options)) (*cloudformation.CreateChangeSetOutput, error) {
 					if input.ChangeSetType == types.ChangeSetTypeUpdate {
 						return &cloudformation.CreateChangeSetOutput{}, nil
@@ -80,6 +100,10 @@ func Test_CloudFormationService_Deploy(t *testing.T) {
 						Stacks: []types.Stack{
 							{
 								StackStatus: types.StackStatusUpdateComplete,
+								Outputs: []types.Output{
+									{OutputKey: aws.String("InstanceId"), OutputValue: aws.String("i-update001")},
+									{OutputKey: aws.String("AvailabilityZone"), OutputValue: aws.String("us-east-1b")},
+								},
 							},
 						},
 					}, nil
@@ -87,6 +111,43 @@ func Test_CloudFormationService_Deploy(t *testing.T) {
 
 				m.ExecuteChangeSetFn = func(ctx context.Context, input *cloudformation.ExecuteChangeSetInput, o ...func(*cloudformation.Options)) (*cloudformation.ExecuteChangeSetOutput, error) {
 					return &cloudformation.ExecuteChangeSetOutput{}, nil
+				}
+			},
+		},
+
+		{
+			name: "empty changeset returns current stack outputs",
+			wantOutputs: map[string]string{
+				"InstanceId":       "i-existing001",
+				"AvailabilityZone": "us-east-1c",
+			},
+			setupMock: func(m *mockCloudFormationClient) {
+				stackOutputs := []types.Output{
+					{OutputKey: aws.String("InstanceId"), OutputValue: aws.String("i-existing001")},
+					{OutputKey: aws.String("AvailabilityZone"), OutputValue: aws.String("us-east-1c")},
+				}
+
+				// Stack exists → UPDATE changeset type, and provides outputs on the final DescribeStacks call.
+				m.DescribeStacksFn = func(ctx context.Context, input *cloudformation.DescribeStacksInput, o ...func(*cloudformation.Options)) (*cloudformation.DescribeStacksOutput, error) {
+					return &cloudformation.DescribeStacksOutput{
+						Stacks: []types.Stack{{StackStatus: types.StackStatusUpdateComplete, Outputs: stackOutputs}},
+					}, nil
+				}
+
+				m.CreateChangeSetFn = func(ctx context.Context, input *cloudformation.CreateChangeSetInput, o ...func(*cloudformation.Options)) (*cloudformation.CreateChangeSetOutput, error) {
+					return &cloudformation.CreateChangeSetOutput{}, nil
+				}
+
+				// Waiter polls DescribeChangeSet; returning FAILED with the no-changes reason triggers the empty-changeset path.
+				m.DescribeChangeSetFn = func(ctx context.Context, input *cloudformation.DescribeChangeSetInput, o ...func(*cloudformation.Options)) (*cloudformation.DescribeChangeSetOutput, error) {
+					return &cloudformation.DescribeChangeSetOutput{
+						Status:       types.ChangeSetStatusFailed,
+						StatusReason: aws.String("The submitted information didn't contain changes. Submit different information to create a change set."),
+					}, nil
+				}
+
+				m.DeleteChangeSetFn = func(ctx context.Context, input *cloudformation.DeleteChangeSetInput, o ...func(*cloudformation.Options)) (*cloudformation.DeleteChangeSetOutput, error) {
+					return &cloudformation.DeleteChangeSetOutput{}, nil
 				}
 			},
 		},
@@ -98,13 +159,20 @@ func Test_CloudFormationService_Deploy(t *testing.T) {
 			tt.setupMock(mock)
 			svc := &cloudFormationService{mock}
 
-			_, err := svc.Deploy(t.Context(), &DeployInput{
+			out, err := svc.Deploy(t.Context(), &DeployInput{
 				StackName:      aws.String("test-stack"),
 				DeploymentName: aws.String("my-deployment"),
 			})
 
 			if err != nil {
 				t.Fatal(err)
+			}
+
+			got := outputByKey(out.Outputs)
+			for key, want := range tt.wantOutputs {
+				if got[key] != want {
+					t.Errorf("output %s: want %q, got %q", key, want, got[key])
+				}
 			}
 		})
 	}

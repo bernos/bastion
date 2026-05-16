@@ -91,3 +91,6 @@ Outputs:
   InstanceId:
     Value: !Ref BastionInstance
     Description: Bastion EC2 instance ID — use with aws ssm start-session or ec2-instance-connect
+  AvailabilityZone:
+    Value: !GetAtt BastionInstance.AvailabilityZone
+    Description: Availability zone of the bastion EC2 instance
