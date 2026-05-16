@@ -190,10 +190,12 @@ vpc-id: vpc-from-file
 // given and none is found during automatic search, Initialize succeeds.
 func TestInitialize_NoConfigFile_NoError(t *testing.T) {
 	reset(t)
-	// Change to a temp dir so Viper's automatic search finds no config.yaml there.
-	orig, _ := os.Getwd()
-	t.Cleanup(func() { _ = os.Chdir(orig) })
-	_ = os.Chdir(t.TempDir())
+	// Redirect the user config dir to an empty temp dir so Viper's automatic
+	// search does not pick up a real config file from the developer's machine.
+	// XDG_CONFIG_HOME is used on Linux; HOME covers the macOS fallback path.
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+	t.Setenv("HOME", tmp)
 
 	cfg := &config.Config{}
 	if err := config.Initialize(cfg, newTestCmd(), ""); err != nil {
