@@ -29,25 +29,17 @@ func writeTempConfig(t *testing.T, content string) string {
 	return f
 }
 
-// reset redirects the user config dir to an empty temp dir so Viper's
-// automatic search does not pick up a real config file from the developer's
-// machine. XDG_CONFIG_HOME covers Linux; HOME covers the macOS fallback.
-func reset(t *testing.T) {
-	t.Helper()
-	tmp := t.TempDir()
-	t.Setenv("XDG_CONFIG_HOME", tmp)
-	t.Setenv("HOME", tmp)
-}
-
 func TestInitialize_FromConfigFile(t *testing.T) {
-	reset(t)
 	cfgFile := writeTempConfig(t, `
 name: file-name
 subnet-id: subnet-from-file
 vpc-id: vpc-from-file
 `)
+	v := viper.New()
+	v.SetConfigFile(cfgFile)
+
 	cfg := &config.Config{}
-	if err := config.Initialize(cfg, viper.New(), newTestCmd(), cfgFile); err != nil {
+	if err := config.Initialize(cfg, v, newTestCmd()); err != nil {
 		t.Fatal(err)
 	}
 
@@ -63,13 +55,12 @@ vpc-id: vpc-from-file
 }
 
 func TestInitialize_FromEnvVars(t *testing.T) {
-	reset(t)
 	t.Setenv("BASTION_NAME", "env-name")
 	t.Setenv("BASTION_SUBNET_ID", "subnet-from-env")
 	t.Setenv("BASTION_VPC_ID", "vpc-from-env")
 
 	cfg := &config.Config{}
-	if err := config.Initialize(cfg, viper.New(), newTestCmd(), ""); err != nil {
+	if err := config.Initialize(cfg, viper.New(), newTestCmd()); err != nil {
 		t.Fatal(err)
 	}
 
@@ -85,7 +76,6 @@ func TestInitialize_FromEnvVars(t *testing.T) {
 }
 
 func TestInitialize_FromFlags(t *testing.T) {
-	reset(t)
 	cmd := newTestCmd()
 	if err := cmd.Flags().Set("name", "flag-name"); err != nil {
 		t.Fatal(err)
@@ -98,7 +88,7 @@ func TestInitialize_FromFlags(t *testing.T) {
 	}
 
 	cfg := &config.Config{}
-	if err := config.Initialize(cfg, viper.New(), cmd, ""); err != nil {
+	if err := config.Initialize(cfg, viper.New(), cmd); err != nil {
 		t.Fatal(err)
 	}
 
@@ -114,7 +104,6 @@ func TestInitialize_FromFlags(t *testing.T) {
 }
 
 func TestInitialize_Precedence_FlagsOverEnv(t *testing.T) {
-	reset(t)
 	t.Setenv("BASTION_NAME", "env-name")
 	t.Setenv("BASTION_SUBNET_ID", "subnet-from-env")
 	t.Setenv("BASTION_VPC_ID", "vpc-from-env")
@@ -131,7 +120,7 @@ func TestInitialize_Precedence_FlagsOverEnv(t *testing.T) {
 	}
 
 	cfg := &config.Config{}
-	if err := config.Initialize(cfg, viper.New(), cmd, ""); err != nil {
+	if err := config.Initialize(cfg, viper.New(), cmd); err != nil {
 		t.Fatal(err)
 	}
 
@@ -147,7 +136,6 @@ func TestInitialize_Precedence_FlagsOverEnv(t *testing.T) {
 }
 
 func TestInitialize_Precedence_FlagsOverConfigFile(t *testing.T) {
-	reset(t)
 	cfgFile := writeTempConfig(t, `
 name: file-name
 subnet-id: subnet-from-file
@@ -164,8 +152,11 @@ vpc-id: vpc-from-file
 		t.Fatal(err)
 	}
 
+	v := viper.New()
+	v.SetConfigFile(cfgFile)
+
 	cfg := &config.Config{}
-	if err := config.Initialize(cfg, viper.New(), cmd, cfgFile); err != nil {
+	if err := config.Initialize(cfg, v, cmd); err != nil {
 		t.Fatal(err)
 	}
 
@@ -181,7 +172,6 @@ vpc-id: vpc-from-file
 }
 
 func TestInitialize_Precedence_EnvOverConfigFile(t *testing.T) {
-	reset(t)
 	cfgFile := writeTempConfig(t, `
 name: file-name
 subnet-id: subnet-from-file
@@ -191,8 +181,11 @@ vpc-id: vpc-from-file
 	t.Setenv("BASTION_SUBNET_ID", "subnet-from-env")
 	t.Setenv("BASTION_VPC_ID", "vpc-from-env")
 
+	v := viper.New()
+	v.SetConfigFile(cfgFile)
+
 	cfg := &config.Config{}
-	if err := config.Initialize(cfg, viper.New(), newTestCmd(), cfgFile); err != nil {
+	if err := config.Initialize(cfg, v, newTestCmd()); err != nil {
 		t.Fatal(err)
 	}
 
@@ -207,31 +200,35 @@ vpc-id: vpc-from-file
 	}
 }
 
-// TestInitialize_NoConfigFile_NoError verifies that when no config file path is
-// given and none is found during automatic search, Initialize succeeds.
+// TestInitialize_NoConfigFile_NoError verifies that Initialize succeeds when
+// the Viper instance has no config paths configured (ReadInConfig returns
+// ConfigFileNotFoundError, which Initialize silently ignores).
 func TestInitialize_NoConfigFile_NoError(t *testing.T) {
-	reset(t)
 	cfg := &config.Config{}
-	if err := config.Initialize(cfg, viper.New(), newTestCmd(), ""); err != nil {
-		t.Errorf("expected no error when no config file exists, got: %v", err)
+	if err := config.Initialize(cfg, viper.New(), newTestCmd()); err != nil {
+		t.Errorf("expected no error when no config file is configured, got: %v", err)
 	}
 }
 
-// TestInitialize_ExplicitMissingConfigFile_Error verifies that pointing Initialize
-// at a specific path that does not exist returns an error.
+// TestInitialize_ExplicitMissingConfigFile_Error verifies that pointing the
+// Viper instance at a specific path that does not exist returns an error.
 func TestInitialize_ExplicitMissingConfigFile_Error(t *testing.T) {
-	reset(t)
+	v := viper.New()
+	v.SetConfigFile(filepath.Join(t.TempDir(), "nonexistent.yaml"))
+
 	cfg := &config.Config{}
-	if err := config.Initialize(cfg, viper.New(), newTestCmd(), filepath.Join(t.TempDir(), "nonexistent.yaml")); err == nil {
+	if err := config.Initialize(cfg, v, newTestCmd()); err == nil {
 		t.Error("expected error for explicit non-existent config file path, got nil")
 	}
 }
 
 func TestInitialize_InvalidConfigFile_Error(t *testing.T) {
-	reset(t)
 	cfgFile := writeTempConfig(t, `{this is not: valid yaml:`)
+	v := viper.New()
+	v.SetConfigFile(cfgFile)
+
 	cfg := &config.Config{}
-	if err := config.Initialize(cfg, viper.New(), newTestCmd(), cfgFile); err == nil {
+	if err := config.Initialize(cfg, v, newTestCmd()); err == nil {
 		t.Error("expected error for invalid config file, got nil")
 	}
 }
