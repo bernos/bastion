@@ -40,6 +40,10 @@ func Test_CloudFormationService_Deploy(t *testing.T) {
 							Stacks: []types.Stack{
 								{
 									StackStatus: types.StackStatusCreateComplete,
+									Outputs: []types.Output{
+										{OutputKey: aws.String("InstanceId"), OutputValue: aws.String("i-create001")},
+										{OutputKey: aws.String("AvailabilityZone"), OutputValue: aws.String("us-east-1a")},
+									},
 								},
 							},
 						}, nil
@@ -80,6 +84,10 @@ func Test_CloudFormationService_Deploy(t *testing.T) {
 						Stacks: []types.Stack{
 							{
 								StackStatus: types.StackStatusUpdateComplete,
+								Outputs: []types.Output{
+									{OutputKey: aws.String("InstanceId"), OutputValue: aws.String("i-update001")},
+									{OutputKey: aws.String("AvailabilityZone"), OutputValue: aws.String("us-east-1b")},
+								},
 							},
 						},
 					}, nil
@@ -98,13 +106,17 @@ func Test_CloudFormationService_Deploy(t *testing.T) {
 			tt.setupMock(mock)
 			svc := &cloudFormationService{mock}
 
-			_, err := svc.Deploy(t.Context(), &DeployInput{
+			out, err := svc.Deploy(t.Context(), &DeployInput{
 				StackName:      aws.String("test-stack"),
 				DeploymentName: aws.String("my-deployment"),
 			})
 
 			if err != nil {
 				t.Fatal(err)
+			}
+
+			if len(out.Outputs) == 0 {
+				t.Fatal("expected Outputs to be populated, got none")
 			}
 		})
 	}

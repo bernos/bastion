@@ -354,6 +354,7 @@ func (d *DeployInput) Validate() error {
 type DeployOutput struct {
 	CreateChangeSetInput *cloudformation.CreateChangeSetInput
 	Changes              []types.Change
+	Outputs              []types.Output
 }
 
 type DeployOptions struct {
@@ -404,9 +405,20 @@ func (s *cloudFormationService) Deploy(ctx context.Context, input *DeployInput, 
 					return nil, err
 				}
 
+				describeOut, err := s.client.DescribeStacks(ctx, input.AsDescribeStacksInput())
+				if err != nil {
+					return nil, err
+				}
+
+				var outputs []types.Output
+				if len(describeOut.Stacks) > 0 {
+					outputs = describeOut.Stacks[0].Outputs
+				}
+
 				return &DeployOutput{
 					CreateChangeSetInput: createChangeSetInput,
 					Changes:              []types.Change{},
+					Outputs:              outputs,
 				}, nil
 			}
 		} else {
@@ -414,14 +426,20 @@ func (s *cloudFormationService) Deploy(ctx context.Context, input *DeployInput, 
 		}
 	}
 
-	_, err = s.executeChangeSetAndWait(ctx, input.AsExecuteChangeSetInput(), changeSetType, o.Timeout)
+	describeStacksOut, err := s.executeChangeSetAndWait(ctx, input.AsExecuteChangeSetInput(), changeSetType, o.Timeout)
 	if err != nil {
 		return nil, fmt.Errorf("failed to execute changeset %s: %w", *input.DeploymentName, err)
+	}
+
+	var outputs []types.Output
+	if describeStacksOut != nil && len(describeStacksOut.Stacks) > 0 {
+		outputs = describeStacksOut.Stacks[0].Outputs
 	}
 
 	return &DeployOutput{
 		CreateChangeSetInput: createChangeSetInput,
 		Changes:              describeChangeSetOutput.Changes,
+		Outputs:              outputs,
 	}, nil
 }
 
