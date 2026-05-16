@@ -21,7 +21,7 @@ type Config struct {
 
 func Initialize(cfg *Config, cmd *cobra.Command, cfgFile string) error {
 	viper.SetEnvPrefix(EnvVarPrefix)
-	viper.SetEnvKeyReplacer(strings.NewReplacer(".", "*", "-", "*"))
+	viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_", "-", "_"))
 	viper.AutomaticEnv()
 
 	if cfgFile != "" {
