@@ -10,19 +10,19 @@ When the user invokes `/verify`, run the full test suite in two stages and repor
 
 1. **Lint** — run golangci-lint first:
    ```bash
-   golangci-lint run ./... 2>&1
+   make lint 2>&1
    ```
    Report any issues. If golangci-lint is not installed, skip and note it.
 
 2. **Unit tests** — run and capture output:
    ```bash
-   go test ./... 2>&1
+   make test 2>&1
    ```
    Report pass/fail. If any tests fail, show the failing test names and error output, then stop (don't proceed to integration tests).
 
 3. **Integration tests** — only if unit tests passed:
    ```bash
-   go test -tags integration ./... 2>&1
+   make test-integration 2>&1
    ```
    These require Docker. If Docker is not running, tell the user and skip this step.
    Report pass/fail. Show failing test names and errors if any.
