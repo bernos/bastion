@@ -14,7 +14,7 @@ const (
 )
 
 type Config struct {
-	Name     string
+	Name     string `mapstructure:"name"`
 	SubnetID string `mapstructure:"subnet-id"`
 	VPCID    string `mapstructure:"vpc-id"`
 }
