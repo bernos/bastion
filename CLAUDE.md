@@ -9,28 +9,33 @@ Bastion is a CLI tool that provisions EC2 bastion hosts on AWS via CloudFormatio
 ## Build & Run
 
 ```bash
-go build -o bastion ./cmd/bastion
+make build
 ./bastion up
 ```
 
 ## Lint
 
 ```bash
-golangci-lint run ./...
+make lint
 ```
 
-Install: `mise use -g golangci-lint` (or see golangci-lint docs). Config is in `.golangci.yml`.
+Install golangci-lint: `mise use -g golangci-lint` (or see golangci-lint docs). Config is in `.golangci.yml`.
 
 ## Testing
 
 Unit tests (no external dependencies):
 ```bash
-go test ./...
+make test
 ```
 
 Integration tests (require Docker — spin up LocalStack containers):
 ```bash
-go test -tags integration ./...
+make test-integration
+```
+
+Both suites:
+```bash
+make test-all
 ```
 
 Single test:
