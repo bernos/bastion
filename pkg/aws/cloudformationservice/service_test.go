@@ -5,7 +5,6 @@ import (
 	_ "embed"
 	"fmt"
 	"testing"
-	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/cloudformation"
@@ -106,7 +105,7 @@ func Test_CloudFormationService_Deploy(t *testing.T) {
 			_, err := svc.Deploy(t.Context(), &DeployInput{
 				StackName:      aws.String("test-stack"),
 				DeploymentName: aws.String("my-deployment"),
-			}, time.Second*10)
+			})
 
 			if err != nil {
 				t.Fatal(err)
