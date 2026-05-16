@@ -13,7 +13,7 @@ The CloudFormation stack SHALL attach an IAM instance profile that includes the 
 - **THEN** the instance appears as a managed instance in SSM Fleet Manager and sessions can be started via `aws ssm start-session`
 
 ### Requirement: Bastion instance is accessible via EC2 Instance Connect
-The CloudFormation stack SHALL attach an IAM role that grants the `ec2-instance-connect:SendSSHPublicKey` action so that EC2 Instance Connect Endpoint can be used for shell access.
+The CloudFormation stack SHALL provision the instance so that it is reachable via an EC2 Instance Connect Endpoint (EICE). No instance-side IAM permissions are required for EICE — `ec2-instance-connect:SendSSHPublicKey` and `ec2-instance-connect:OpenTunnel` are caller permissions, not instance permissions. The instance role SHALL NOT include these actions.
 
 #### Scenario: EC2 Instance Connect Endpoint shell access
 - **WHEN** an EC2 Instance Connect Endpoint exists in the target VPC and the caller has `ec2-instance-connect:OpenTunnel` permission
