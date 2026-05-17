@@ -78,7 +78,7 @@ func TestBastionService_DeployBastion(t *testing.T) {
 	}
 
 	cfnClient := cloudformation.NewFromConfig(cfg)
-	svc := bastion.NewBastionService(cfnsvc.New(cfnClient))
+	svc := bastion.NewBastionService(cfnsvc.New(cfnClient), nil, nil)
 
 	name := "bastion-" + testhelpers.UID(t)
 
