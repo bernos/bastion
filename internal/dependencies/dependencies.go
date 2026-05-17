@@ -6,6 +6,8 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/cloudformation"
+	ec2ic "github.com/aws/aws-sdk-go-v2/service/ec2instanceconnect"
+	"github.com/aws/aws-sdk-go-v2/service/ssm"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
 	"github.com/bernos/bastion/internal/bastion"
 	"github.com/bernos/bastion/internal/config"
@@ -57,11 +59,19 @@ func (d *Dependencies) BastionService(ctx context.Context) (bastion.BastionServi
 	if d.bastionService != nil {
 		return d.bastionService, nil
 	}
+	awsCfg, err := d.AwsConfig(ctx)
+	if err != nil {
+		return nil, err
+	}
 	cfnClient, err := d.CloudFormationClient(ctx)
 	if err != nil {
 		return nil, err
 	}
-	d.bastionService = bastion.NewBastionService(cloudformationservice.New(cfnClient))
+	d.bastionService = bastion.NewBastionService(
+		cloudformationservice.New(cfnClient),
+		ec2ic.NewFromConfig(awsCfg),
+		ssm.NewFromConfig(awsCfg),
+	)
 	return d.bastionService, nil
 }
 

@@ -17,6 +17,7 @@ func newTestCmd() *cobra.Command {
 	cmd.Flags().String("owner", "", "")
 	cmd.Flags().String("subnet-id", "", "")
 	cmd.Flags().String("vpc-id", "", "")
+	cmd.Flags().String("public-key-path", "", "")
 	return cmd
 }
 
@@ -234,6 +235,61 @@ func TestInitialize_ExplicitMissingConfigFile_Error(t *testing.T) {
 	cfg := &config.Config{}
 	if err := config.Initialize(cfg, v, newTestCmd()); err == nil {
 		t.Error("expected error for explicit non-existent config file path, got nil")
+	}
+}
+
+func TestInitialize_PublicKeyPath_FromFlag(t *testing.T) {
+	cmd := newTestCmd()
+	if err := cmd.Flags().Set("public-key-path", "/path/to/key.pub"); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg := &config.Config{}
+	if err := config.Initialize(cfg, viper.New(), cmd); err != nil {
+		t.Fatal(err)
+	}
+
+	if cfg.PublicKeyPath != "/path/to/key.pub" {
+		t.Errorf("PublicKeyPath: want %q, got %q", "/path/to/key.pub", cfg.PublicKeyPath)
+	}
+}
+
+func TestInitialize_PublicKeyPath_FromEnvVar(t *testing.T) {
+	t.Setenv("BASTION_PUBLIC_KEY_PATH", "/env/path/key.pub")
+
+	cfg := &config.Config{}
+	if err := config.Initialize(cfg, viper.New(), newTestCmd()); err != nil {
+		t.Fatal(err)
+	}
+
+	if cfg.PublicKeyPath != "/env/path/key.pub" {
+		t.Errorf("PublicKeyPath: want %q, got %q", "/env/path/key.pub", cfg.PublicKeyPath)
+	}
+}
+
+func TestInitialize_PublicKeyPath_FromConfigFile(t *testing.T) {
+	cfgFile := writeTempConfig(t, `public-key-path: /file/path/key.pub`)
+	v := viper.New()
+	v.SetConfigFile(cfgFile)
+
+	cfg := &config.Config{}
+	if err := config.Initialize(cfg, v, newTestCmd()); err != nil {
+		t.Fatal(err)
+	}
+
+	if cfg.PublicKeyPath != "/file/path/key.pub" {
+		t.Errorf("PublicKeyPath: want %q, got %q", "/file/path/key.pub", cfg.PublicKeyPath)
+	}
+}
+
+func TestInitialize_PublicKeyPath_OmittedIsEmpty(t *testing.T) {
+	cfg := &config.Config{}
+	if err := config.Initialize(cfg, viper.New(), newTestCmd()); err != nil {
+		t.Fatal(err)
+	}
+
+	if cfg.PublicKeyPath != "" {
+		t.Errorf("PublicKeyPath: want empty string, got %q", cfg.PublicKeyPath)
 	}
 }
 

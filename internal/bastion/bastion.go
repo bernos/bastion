@@ -3,11 +3,15 @@ package bastion
 import (
 	"context"
 	"fmt"
+	"time"
 
 	_ "embed"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/cloudformation/types"
+	ec2ic "github.com/aws/aws-sdk-go-v2/service/ec2instanceconnect"
+	"github.com/aws/aws-sdk-go-v2/service/ssm"
+	ssmtypes "github.com/aws/aws-sdk-go-v2/service/ssm/types"
 	"github.com/bernos/bastion/pkg/aws/cloudformationservice"
 	gonanoid "github.com/matoous/go-nanoid/v2"
 )
@@ -21,17 +25,33 @@ var (
 	stackTemplate string
 )
 
+type ec2InstanceConnectClient interface {
+	SendSSHPublicKey(ctx context.Context, params *ec2ic.SendSSHPublicKeyInput, optFns ...func(*ec2ic.Options)) (*ec2ic.SendSSHPublicKeyOutput, error)
+}
+
+type ssmClient interface {
+	DescribeInstanceInformation(ctx context.Context, params *ssm.DescribeInstanceInformationInput, optFns ...func(*ssm.Options)) (*ssm.DescribeInstanceInformationOutput, error)
+}
+
 type BastionService interface {
 	DeployBastion(context.Context, *DeployBastionInput) (*DeployBastionOutput, error)
 }
 
 type bastionService struct {
 	cloudFormationService cloudformationservice.CloudFormationService
+	ec2ic                 ec2InstanceConnectClient
+	ssm                   ssmClient
 }
 
-func NewBastionService(cloudFormationService cloudformationservice.CloudFormationService) BastionService {
+func NewBastionService(
+	cloudFormationService cloudformationservice.CloudFormationService,
+	ec2ic ec2InstanceConnectClient,
+	ssm ssmClient,
+) BastionService {
 	return &bastionService{
 		cloudFormationService: cloudFormationService,
+		ec2ic:                 ec2ic,
+		ssm:                   ssm,
 	}
 }
 
@@ -42,6 +62,7 @@ type DeployBastionInput struct {
 	AMIParameterName string
 	InstanceType     string
 	VPCID            string
+	PublicKeyContent string
 }
 
 type DeployBastionOutput struct {
@@ -97,5 +118,61 @@ func (svc *bastionService) DeployBastion(ctx context.Context, input *DeployBasti
 			result.AvailabilityZone = aws.ToString(o.OutputValue)
 		}
 	}
+
+	if input.PublicKeyContent != "" {
+		if err := svc.waitForSSMReady(ctx, result.InstanceID); err != nil {
+			return nil, err
+		}
+		if _, err := svc.ec2ic.SendSSHPublicKey(ctx, &ec2ic.SendSSHPublicKeyInput{
+			InstanceId:       aws.String(result.InstanceID),
+			InstanceOSUser:   aws.String("ec2-user"),
+			SSHPublicKey:     aws.String(input.PublicKeyContent),
+			AvailabilityZone: aws.String(result.AvailabilityZone),
+		}); err != nil {
+			return nil, fmt.Errorf("uploading SSH public key: %w", err)
+		}
+	}
+
 	return result, nil
+}
+
+func (svc *bastionService) waitForSSMReady(ctx context.Context, instanceID string) error {
+	ctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
+	defer cancel()
+
+	ticker := time.NewTicker(10 * time.Second)
+	defer ticker.Stop()
+
+	check := func() (bool, error) {
+		out, err := svc.ssm.DescribeInstanceInformation(ctx, &ssm.DescribeInstanceInformationInput{
+			InstanceInformationFilterList: []ssmtypes.InstanceInformationFilter{
+				{Key: ssmtypes.InstanceInformationFilterKeyInstanceIds, ValueSet: []string{instanceID}},
+			},
+		})
+		if err != nil {
+			return false, fmt.Errorf("describing SSM instance information: %w", err)
+		}
+		for _, info := range out.InstanceInformationList {
+			if info.PingStatus == ssmtypes.PingStatusOnline {
+				return true, nil
+			}
+		}
+		return false, nil
+	}
+
+	// Check immediately before waiting for the first tick.
+	if ready, err := check(); err != nil || ready {
+		return err
+	}
+
+	for {
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf("timed out waiting for SSM agent on instance %s to come online: check SSM Fleet Manager for details", instanceID)
+		case <-ticker.C:
+			if ready, err := check(); err != nil || ready {
+				return err
+			}
+		}
+	}
 }
