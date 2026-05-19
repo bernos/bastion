@@ -61,7 +61,7 @@ Resources:
   BastionSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
-      GroupDescription: Bastion host — no inbound rules required (SSM and EICE handle access)
+      GroupDescription: Bastion host - no inbound rules required (SSM and EICE handle access)
       VpcId: !Ref VpcId
       Tags:
         - Key: Name
@@ -90,7 +90,7 @@ Resources:
 Outputs:
   InstanceId:
     Value: !Ref BastionInstance
-    Description: Bastion EC2 instance ID — use with aws ssm start-session or ec2-instance-connect
+    Description: Bastion EC2 instance ID - use with aws ssm start-session or ec2-instance-connect
   AvailabilityZone:
     Value: !GetAtt BastionInstance.AvailabilityZone
     Description: Availability zone of the bastion EC2 instance
