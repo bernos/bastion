@@ -35,6 +35,7 @@ type ssmClient interface {
 
 type BastionService interface {
 	DeployBastion(context.Context, *DeployBastionInput) (*DeployBastionOutput, error)
+	DeleteBastion(context.Context, *DeleteBastionInput) error
 }
 
 type bastionService struct {
@@ -53,6 +54,10 @@ func NewBastionService(
 		ec2ic:                 ec2ic,
 		ssm:                   ssm,
 	}
+}
+
+type DeleteBastionInput struct {
+	BastionName string
 }
 
 type DeployBastionInput struct {
@@ -134,6 +139,20 @@ func (svc *bastionService) DeployBastion(ctx context.Context, input *DeployBasti
 	}
 
 	return result, nil
+}
+
+func (svc *bastionService) DeleteBastion(ctx context.Context, input *DeleteBastionInput) error {
+	stackName := fmt.Sprintf("%s-stack", input.BastionName)
+
+	exists, err := svc.cloudFormationService.StackExists(ctx, stackName)
+	if err != nil {
+		return err
+	}
+	if !exists {
+		return fmt.Errorf("stack %q does not exist", stackName)
+	}
+
+	return svc.cloudFormationService.DeleteStack(ctx, stackName)
 }
 
 func (svc *bastionService) waitForSSMReady(ctx context.Context, instanceID string) error {
