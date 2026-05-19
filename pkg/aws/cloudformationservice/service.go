@@ -15,6 +15,7 @@ import (
 
 type CloudFormationService interface {
 	Deploy(ctx context.Context, input *DeployInput, opts ...func(*DeployOptions)) (*DeployOutput, error)
+	DeleteStack(ctx context.Context, stackName string) error
 	StackExists(ctx context.Context, stackName string) (bool, error)
 }
 
@@ -26,6 +27,7 @@ type CloudFormationClient interface {
 	CreateChangeSet(context.Context, *cloudformation.CreateChangeSetInput, ...func(*cloudformation.Options)) (*cloudformation.CreateChangeSetOutput, error)
 	CreateStack(context.Context, *cloudformation.CreateStackInput, ...func(*cloudformation.Options)) (*cloudformation.CreateStackOutput, error)
 	DeleteChangeSet(context.Context, *cloudformation.DeleteChangeSetInput, ...func(*cloudformation.Options)) (*cloudformation.DeleteChangeSetOutput, error)
+	DeleteStack(context.Context, *cloudformation.DeleteStackInput, ...func(*cloudformation.Options)) (*cloudformation.DeleteStackOutput, error)
 	DescribeChangeSet(context.Context, *cloudformation.DescribeChangeSetInput, ...func(*cloudformation.Options)) (*cloudformation.DescribeChangeSetOutput, error)
 	DescribeStacks(context.Context, *cloudformation.DescribeStacksInput, ...func(*cloudformation.Options)) (*cloudformation.DescribeStacksOutput, error)
 	ExecuteChangeSet(context.Context, *cloudformation.ExecuteChangeSetInput, ...func(*cloudformation.Options)) (*cloudformation.ExecuteChangeSetOutput, error)
@@ -441,6 +443,23 @@ func (s *cloudFormationService) Deploy(ctx context.Context, input *DeployInput, 
 		Changes:              describeChangeSetOutput.Changes,
 		Outputs:              outputs,
 	}, nil
+}
+
+func (s *cloudFormationService) DeleteStack(ctx context.Context, stackName string) error {
+	if _, err := s.client.DeleteStack(ctx, &cloudformation.DeleteStackInput{
+		StackName: aws.String(stackName),
+	}); err != nil {
+		return fmt.Errorf("deleting stack %s: %w", stackName, err)
+	}
+
+	waiter := cloudformation.NewStackDeleteCompleteWaiter(s.client)
+	if err := waiter.Wait(ctx, &cloudformation.DescribeStacksInput{
+		StackName: aws.String(stackName),
+	}, 15*time.Minute); err != nil {
+		return fmt.Errorf("waiting for stack %s deletion: %w", stackName, err)
+	}
+
+	return nil
 }
 
 func (s *cloudFormationService) StackExists(ctx context.Context, stackName string) (bool, error) {

@@ -13,6 +13,7 @@ type mockCloudFormationClient struct {
 	CreateChangeSetFn   func(context.Context, *cloudformation.CreateChangeSetInput, ...func(*cloudformation.Options)) (*cloudformation.CreateChangeSetOutput, error)
 	CreateStackFn       func(context.Context, *cloudformation.CreateStackInput, ...func(*cloudformation.Options)) (*cloudformation.CreateStackOutput, error)
 	DeleteChangeSetFn   func(context.Context, *cloudformation.DeleteChangeSetInput, ...func(*cloudformation.Options)) (*cloudformation.DeleteChangeSetOutput, error)
+	DeleteStackFn       func(context.Context, *cloudformation.DeleteStackInput, ...func(*cloudformation.Options)) (*cloudformation.DeleteStackOutput, error)
 	DescribeChangeSetFn func(context.Context, *cloudformation.DescribeChangeSetInput, ...func(*cloudformation.Options)) (*cloudformation.DescribeChangeSetOutput, error)
 	DescribeStacksFn    func(context.Context, *cloudformation.DescribeStacksInput, ...func(*cloudformation.Options)) (*cloudformation.DescribeStacksOutput, error)
 	ExecuteChangeSetFn  func(context.Context, *cloudformation.ExecuteChangeSetInput, ...func(*cloudformation.Options)) (*cloudformation.ExecuteChangeSetOutput, error)
@@ -30,6 +31,13 @@ func (m *mockCloudFormationClient) CreateStack(ctx context.Context, input *cloud
 		return m.CreateStackFn(ctx, input, o...)
 	}
 
+	return nil, errMockNotImplemented
+}
+
+func (m *mockCloudFormationClient) DeleteStack(ctx context.Context, input *cloudformation.DeleteStackInput, o ...func(*cloudformation.Options)) (*cloudformation.DeleteStackOutput, error) {
+	if m.DeleteStackFn != nil {
+		return m.DeleteStackFn(ctx, input, o...)
+	}
 	return nil, errMockNotImplemented
 }
 

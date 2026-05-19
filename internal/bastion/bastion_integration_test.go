@@ -44,6 +44,60 @@ func TestMain(m *testing.M) {
 	os.Exit(code)
 }
 
+func TestBastionService_DeleteBastion(t *testing.T) {
+	ctx := t.Context()
+
+	ec2Client := ec2.NewFromConfig(cfg)
+	ssmClient := ssm.NewFromConfig(cfg)
+
+	vpcOut, err := ec2Client.CreateVpc(ctx, &ec2.CreateVpcInput{
+		CidrBlock: aws.String("10.1.0.0/16"),
+	})
+	if err != nil {
+		t.Fatalf("create vpc: %v", err)
+	}
+	vpcID := aws.ToString(vpcOut.Vpc.VpcId)
+
+	subnetOut, err := ec2Client.CreateSubnet(ctx, &ec2.CreateSubnetInput{
+		VpcId:     aws.String(vpcID),
+		CidrBlock: aws.String("10.1.1.0/24"),
+	})
+	if err != nil {
+		t.Fatalf("create subnet: %v", err)
+	}
+	subnetID := aws.ToString(subnetOut.Subnet.SubnetId)
+
+	amiParamName := "/bastion/test/ami-id-delete"
+	_, err = ssmClient.PutParameter(ctx, &ssm.PutParameterInput{
+		Name:  aws.String(amiParamName),
+		Value: aws.String("ami-00000000"),
+		Type:  "String",
+	})
+	if err != nil {
+		t.Fatalf("put ssm parameter: %v", err)
+	}
+
+	cfnClient := cloudformation.NewFromConfig(cfg)
+	svc := bastion.NewBastionService(cfnsvc.New(cfnClient), nil, nil)
+
+	name := "bastion-" + testhelpers.UID(t)
+
+	if _, err := svc.DeployBastion(ctx, &bastion.DeployBastionInput{
+		BastionName:      name,
+		Owner:            "test",
+		SubnetID:         subnetID,
+		VPCID:            vpcID,
+		InstanceType:     "t3.micro",
+		AMIParameterName: amiParamName,
+	}); err != nil {
+		t.Fatalf("DeployBastion: %v", err)
+	}
+
+	if err := svc.DeleteBastion(ctx, &bastion.DeleteBastionInput{BastionName: name}); err != nil {
+		t.Fatalf("DeleteBastion: %v", err)
+	}
+}
+
 func TestBastionService_DeployBastion(t *testing.T) {
 	ctx := t.Context()
 

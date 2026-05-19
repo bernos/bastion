@@ -18,14 +18,26 @@ import (
 // --- mocks ---
 
 type mockCloudFormationService struct {
-	DeployFn func(context.Context, *cloudformationservice.DeployInput, ...func(*cloudformationservice.DeployOptions)) (*cloudformationservice.DeployOutput, error)
+	DeployFn      func(context.Context, *cloudformationservice.DeployInput, ...func(*cloudformationservice.DeployOptions)) (*cloudformationservice.DeployOutput, error)
+	DeleteStackFn func(context.Context, string) error
+	StackExistsFn func(context.Context, string) (bool, error)
 }
 
 func (m *mockCloudFormationService) Deploy(ctx context.Context, input *cloudformationservice.DeployInput, opts ...func(*cloudformationservice.DeployOptions)) (*cloudformationservice.DeployOutput, error) {
 	return m.DeployFn(ctx, input, opts...)
 }
 
+func (m *mockCloudFormationService) DeleteStack(ctx context.Context, stackName string) error {
+	if m.DeleteStackFn != nil {
+		return m.DeleteStackFn(ctx, stackName)
+	}
+	return nil
+}
+
 func (m *mockCloudFormationService) StackExists(ctx context.Context, stackName string) (bool, error) {
+	if m.StackExistsFn != nil {
+		return m.StackExistsFn(ctx, stackName)
+	}
 	return false, nil
 }
 
@@ -301,6 +313,49 @@ func Test_BastionService_DeployBastion_SSMTimeout_ReturnsError(t *testing.T) {
 	}
 	if ec2icCalled {
 		t.Error("SendSSHPublicKey should not be called when SSM times out")
+	}
+}
+
+func Test_BastionService_DeleteBastion_Success(t *testing.T) {
+	var deletedStack string
+
+	cfn := &mockCloudFormationService{
+		StackExistsFn: func(_ context.Context, stackName string) (bool, error) {
+			return true, nil
+		},
+		DeleteStackFn: func(_ context.Context, stackName string) error {
+			deletedStack = stackName
+			return nil
+		},
+	}
+
+	svc := NewBastionService(cfn, nil, nil)
+
+	if err := svc.DeleteBastion(context.Background(), &DeleteBastionInput{BastionName: "my-bastion"}); err != nil {
+		t.Fatal(err)
+	}
+
+	if deletedStack != "my-bastion-stack" {
+		t.Errorf("want deleted stack %q, got %q", "my-bastion-stack", deletedStack)
+	}
+}
+
+func Test_BastionService_DeleteBastion_StackNotFound_ReturnsError(t *testing.T) {
+	cfn := &mockCloudFormationService{
+		StackExistsFn: func(_ context.Context, stackName string) (bool, error) {
+			return false, nil
+		},
+		DeleteStackFn: func(_ context.Context, stackName string) error {
+			t.Error("DeleteStack should not be called when stack does not exist")
+			return nil
+		},
+	}
+
+	svc := NewBastionService(cfn, nil, nil)
+
+	err := svc.DeleteBastion(context.Background(), &DeleteBastionInput{BastionName: "missing"})
+	if err == nil {
+		t.Fatal("expected error for missing stack, got nil")
 	}
 }
 

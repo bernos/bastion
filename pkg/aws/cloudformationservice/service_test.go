@@ -227,6 +227,58 @@ func Test_CloudFormationService_Deploy(t *testing.T) {
 	// })
 }
 
+func Test_CloudFormationService_DeleteStack(t *testing.T) {
+	cases := []struct {
+		name          string
+		setupMock     func(*mockCloudFormationClient)
+		wantError     bool
+		wantDeleteErr bool
+	}{
+		{
+			name: "success",
+			setupMock: func(m *mockCloudFormationClient) {
+				m.DeleteStackFn = func(ctx context.Context, input *cloudformation.DeleteStackInput, o ...func(*cloudformation.Options)) (*cloudformation.DeleteStackOutput, error) {
+					return &cloudformation.DeleteStackOutput{}, nil
+				}
+				m.DescribeStacksFn = func(ctx context.Context, input *cloudformation.DescribeStacksInput, o ...func(*cloudformation.Options)) (*cloudformation.DescribeStacksOutput, error) {
+					return &cloudformation.DescribeStacksOutput{
+						Stacks: []types.Stack{
+							{StackStatus: types.StackStatusDeleteComplete},
+						},
+					}, nil
+				}
+			},
+		},
+		{
+			name:          "delete api error propagated",
+			wantError:     true,
+			wantDeleteErr: true,
+			setupMock: func(m *mockCloudFormationClient) {
+				m.DeleteStackFn = func(ctx context.Context, input *cloudformation.DeleteStackInput, o ...func(*cloudformation.Options)) (*cloudformation.DeleteStackOutput, error) {
+					return nil, fmt.Errorf("access denied")
+				}
+			},
+		},
+	}
+
+	for _, tt := range cases {
+		t.Run(tt.name, func(t *testing.T) {
+			mock := &mockCloudFormationClient{}
+			tt.setupMock(mock)
+			svc := &cloudFormationService{mock}
+
+			err := svc.DeleteStack(t.Context(), "test-stack")
+
+			if tt.wantError && err == nil {
+				t.Fatal("expected error but got none")
+			}
+			if !tt.wantError && err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+		})
+	}
+}
+
 func Test_CloudFormationService_StackExists(t *testing.T) {
 	cases := []struct {
 		name       string
