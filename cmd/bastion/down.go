@@ -24,22 +24,26 @@ func NewDownCommand(cfg *config.Config) (*cobra.Command, error) {
 				return err
 			}
 
-			return runDown(cmd, cfg.Name, svc)
+			return runDown(cmd, cfg.Name, cfg.Region, svc)
 		},
 	}
 
 	cmd.Flags().String("name", "", "name of the bastion host to tear down")
+	cmd.Flags().String("region", "", "AWS region where the bastion is deployed")
 
-	if err := cmd.MarkFlagRequired("name"); err != nil {
-		return nil, err
+	for _, flag := range []string{"name", "region"} {
+		if err := cmd.MarkFlagRequired(flag); err != nil {
+			return nil, err
+		}
 	}
 
 	return cmd, nil
 }
 
-func runDown(cmd *cobra.Command, name string, svc bastion.BastionService) error {
+func runDown(cmd *cobra.Command, name, region string, svc bastion.BastionService) error {
 	if err := svc.DeleteBastion(cmd.Context(), &bastion.DeleteBastionInput{
 		BastionName: name,
+		Region:      region,
 	}); err != nil {
 		return err
 	}

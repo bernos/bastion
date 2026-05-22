@@ -3,13 +3,13 @@ package bastion
 import (
 	"context"
 	"errors"
+	"fmt"
 	"slices"
 	"testing"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/cloudformation/types"
-	ec2ic "github.com/aws/aws-sdk-go-v2/service/ec2instanceconnect"
 	"github.com/aws/aws-sdk-go-v2/service/ssm"
 	ssmtypes "github.com/aws/aws-sdk-go-v2/service/ssm/types"
 	"github.com/bernos/bastion/pkg/aws/cloudformationservice"
@@ -18,9 +18,10 @@ import (
 // --- mocks ---
 
 type mockCloudFormationService struct {
-	DeployFn      func(context.Context, *cloudformationservice.DeployInput, ...func(*cloudformationservice.DeployOptions)) (*cloudformationservice.DeployOutput, error)
-	DeleteStackFn func(context.Context, string) error
-	StackExistsFn func(context.Context, string) (bool, error)
+	DeployFn          func(context.Context, *cloudformationservice.DeployInput, ...func(*cloudformationservice.DeployOptions)) (*cloudformationservice.DeployOutput, error)
+	DeleteStackFn     func(context.Context, string) error
+	StackExistsFn     func(context.Context, string) (bool, error)
+	GetStackOutputsFn func(context.Context, string) (map[string]string, error)
 }
 
 func (m *mockCloudFormationService) Deploy(ctx context.Context, input *cloudformationservice.DeployInput, opts ...func(*cloudformationservice.DeployOptions)) (*cloudformationservice.DeployOutput, error) {
@@ -41,12 +42,11 @@ func (m *mockCloudFormationService) StackExists(ctx context.Context, stackName s
 	return false, nil
 }
 
-type mockEC2InstanceConnectClient struct {
-	SendSSHPublicKeyFn func(context.Context, *ec2ic.SendSSHPublicKeyInput, ...func(*ec2ic.Options)) (*ec2ic.SendSSHPublicKeyOutput, error)
-}
-
-func (m *mockEC2InstanceConnectClient) SendSSHPublicKey(ctx context.Context, params *ec2ic.SendSSHPublicKeyInput, optFns ...func(*ec2ic.Options)) (*ec2ic.SendSSHPublicKeyOutput, error) {
-	return m.SendSSHPublicKeyFn(ctx, params, optFns...)
+func (m *mockCloudFormationService) GetStackOutputs(ctx context.Context, stackName string) (map[string]string, error) {
+	if m.GetStackOutputsFn != nil {
+		return m.GetStackOutputsFn(ctx, stackName)
+	}
+	return map[string]string{}, nil
 }
 
 type mockSSMClient struct {
@@ -66,19 +66,6 @@ func paramValue(params []types.Parameter, key string) string {
 		}
 	}
 	return ""
-}
-
-func successfulCFNMock(instanceID, az string) *mockCloudFormationService {
-	return &mockCloudFormationService{
-		DeployFn: func(_ context.Context, input *cloudformationservice.DeployInput, _ ...func(*cloudformationservice.DeployOptions)) (*cloudformationservice.DeployOutput, error) {
-			return &cloudformationservice.DeployOutput{
-				Outputs: []types.Output{
-					{OutputKey: aws.String("InstanceId"), OutputValue: aws.String(instanceID)},
-					{OutputKey: aws.String("AvailabilityZone"), OutputValue: aws.String(az)},
-				},
-			}, nil
-		},
-	}
 }
 
 func onlineSSMMock() *mockSSMClient {
@@ -205,117 +192,6 @@ func Test_BastionService_DeployBastion_DefaultsInstanceTypeAndAMI(t *testing.T) 
 	}
 }
 
-// --- new tests for SSH key upload ---
-
-func Test_BastionService_DeployBastion_NoKeyContent_SkipsSSMAndEC2IC(t *testing.T) {
-	ssmCalled := false
-	ec2icCalled := false
-
-	svc := NewBastionService(
-		successfulCFNMock("i-001", "ap-southeast-2a"),
-		&mockEC2InstanceConnectClient{
-			SendSSHPublicKeyFn: func(_ context.Context, _ *ec2ic.SendSSHPublicKeyInput, _ ...func(*ec2ic.Options)) (*ec2ic.SendSSHPublicKeyOutput, error) {
-				ec2icCalled = true
-				return &ec2ic.SendSSHPublicKeyOutput{}, nil
-			},
-		},
-		&mockSSMClient{
-			DescribeInstanceInformationFn: func(_ context.Context, _ *ssm.DescribeInstanceInformationInput, _ ...func(*ssm.Options)) (*ssm.DescribeInstanceInformationOutput, error) {
-				ssmCalled = true
-				return &ssm.DescribeInstanceInformationOutput{}, nil
-			},
-		},
-	)
-
-	if _, err := svc.DeployBastion(context.Background(), &DeployBastionInput{
-		BastionName: "bastion",
-		SubnetID:    "subnet-000",
-		VPCID:       "vpc-000",
-	}); err != nil {
-		t.Fatal(err)
-	}
-
-	if ssmCalled {
-		t.Error("DescribeInstanceInformation should not be called when PublicKeyContent is empty")
-	}
-	if ec2icCalled {
-		t.Error("SendSSHPublicKey should not be called when PublicKeyContent is empty")
-	}
-}
-
-func Test_BastionService_DeployBastion_SSMOnline_UploadsKey(t *testing.T) {
-	var capturedKey *ec2ic.SendSSHPublicKeyInput
-
-	svc := NewBastionService(
-		successfulCFNMock("i-abc001", "ap-southeast-2a"),
-		&mockEC2InstanceConnectClient{
-			SendSSHPublicKeyFn: func(_ context.Context, params *ec2ic.SendSSHPublicKeyInput, _ ...func(*ec2ic.Options)) (*ec2ic.SendSSHPublicKeyOutput, error) {
-				capturedKey = params
-				return &ec2ic.SendSSHPublicKeyOutput{}, nil
-			},
-		},
-		onlineSSMMock(),
-	)
-
-	if _, err := svc.DeployBastion(context.Background(), &DeployBastionInput{
-		BastionName:      "bastion",
-		SubnetID:         "subnet-000",
-		VPCID:            "vpc-000",
-		PublicKeyContent: "ssh-ed25519 AAAA test",
-	}); err != nil {
-		t.Fatal(err)
-	}
-
-	if capturedKey == nil {
-		t.Fatal("SendSSHPublicKey was not called")
-	}
-	if aws.ToString(capturedKey.InstanceId) != "i-abc001" {
-		t.Errorf("InstanceId: want %q, got %q", "i-abc001", aws.ToString(capturedKey.InstanceId))
-	}
-	if aws.ToString(capturedKey.AvailabilityZone) != "ap-southeast-2a" {
-		t.Errorf("AvailabilityZone: want %q, got %q", "ap-southeast-2a", aws.ToString(capturedKey.AvailabilityZone))
-	}
-	if aws.ToString(capturedKey.InstanceOSUser) != "ec2-user" {
-		t.Errorf("InstanceOSUser: want %q, got %q", "ec2-user", aws.ToString(capturedKey.InstanceOSUser))
-	}
-	if aws.ToString(capturedKey.SSHPublicKey) != "ssh-ed25519 AAAA test" {
-		t.Errorf("SSHPublicKey: want %q, got %q", "ssh-ed25519 AAAA test", aws.ToString(capturedKey.SSHPublicKey))
-	}
-}
-
-func Test_BastionService_DeployBastion_SSMTimeout_ReturnsError(t *testing.T) {
-	ec2icCalled := false
-
-	svc := NewBastionService(
-		successfulCFNMock("i-001", "ap-southeast-2a"),
-		&mockEC2InstanceConnectClient{
-			SendSSHPublicKeyFn: func(_ context.Context, _ *ec2ic.SendSSHPublicKeyInput, _ ...func(*ec2ic.Options)) (*ec2ic.SendSSHPublicKeyOutput, error) {
-				ec2icCalled = true
-				return &ec2ic.SendSSHPublicKeyOutput{}, nil
-			},
-		},
-		neverOnlineSSMMock(),
-	)
-
-	// Short-lived context to trigger the timeout quickly.
-	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
-	defer cancel()
-
-	_, err := svc.DeployBastion(ctx, &DeployBastionInput{
-		BastionName:      "bastion",
-		SubnetID:         "subnet-000",
-		VPCID:            "vpc-000",
-		PublicKeyContent: "ssh-ed25519 AAAA test",
-	})
-
-	if err == nil {
-		t.Fatal("expected error on SSM timeout, got nil")
-	}
-	if ec2icCalled {
-		t.Error("SendSSHPublicKey should not be called when SSM times out")
-	}
-}
-
 func Test_BastionService_DeleteBastion_Success(t *testing.T) {
 	var deletedStack string
 
@@ -359,27 +235,98 @@ func Test_BastionService_DeleteBastion_StackNotFound_ReturnsError(t *testing.T) 
 	}
 }
 
-func Test_BastionService_DeployBastion_EC2ICError_Propagated(t *testing.T) {
-	uploadErr := errors.New("ec2ic failure")
-
-	svc := NewBastionService(
-		successfulCFNMock("i-001", "ap-southeast-2a"),
-		&mockEC2InstanceConnectClient{
-			SendSSHPublicKeyFn: func(_ context.Context, _ *ec2ic.SendSSHPublicKeyInput, _ ...func(*ec2ic.Options)) (*ec2ic.SendSSHPublicKeyOutput, error) {
-				return nil, uploadErr
-			},
+func Test_BastionService_DescribeBastion_ReturnsInstanceDetails(t *testing.T) {
+	cfn := &mockCloudFormationService{
+		GetStackOutputsFn: func(_ context.Context, stackName string) (map[string]string, error) {
+			if stackName != "my-bastion-stack" {
+				return nil, fmt.Errorf("unexpected stack name: %s", stackName)
+			}
+			return map[string]string{
+				"InstanceId":       "i-abc001",
+				"AvailabilityZone": "ap-southeast-2a",
+			}, nil
 		},
-		onlineSSMMock(),
-	)
+	}
 
-	_, err := svc.DeployBastion(context.Background(), &DeployBastionInput{
-		BastionName:      "bastion",
-		SubnetID:         "subnet-000",
-		VPCID:            "vpc-000",
-		PublicKeyContent: "ssh-ed25519 AAAA test",
+	svc := NewBastionService(cfn, nil, nil)
+
+	out, err := svc.DescribeBastion(context.Background(), &DescribeBastionInput{
+		BastionName: "my-bastion",
+		Region:      "ap-southeast-2",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if out.InstanceID != "i-abc001" {
+		t.Errorf("InstanceID: want %q, got %q", "i-abc001", out.InstanceID)
+	}
+	if out.AvailabilityZone != "ap-southeast-2a" {
+		t.Errorf("AvailabilityZone: want %q, got %q", "ap-southeast-2a", out.AvailabilityZone)
+	}
+	if out.Region != "ap-southeast-2" {
+		t.Errorf("Region: want %q, got %q", "ap-southeast-2", out.Region)
+	}
+}
+
+func Test_BastionService_DescribeBastion_StackNotFound_ReturnsError(t *testing.T) {
+	cfn := &mockCloudFormationService{
+		GetStackOutputsFn: func(_ context.Context, _ string) (map[string]string, error) {
+			return nil, fmt.Errorf("stack does not exist")
+		},
+	}
+
+	svc := NewBastionService(cfn, nil, nil)
+
+	_, err := svc.DescribeBastion(context.Background(), &DescribeBastionInput{
+		BastionName: "missing",
+		Region:      "ap-southeast-2",
+	})
+	if err == nil {
+		t.Fatal("expected error for missing stack, got nil")
+	}
+}
+
+func Test_BastionService_WaitForSSMReady_OnlineImmediately_ReturnsNil(t *testing.T) {
+	svc := NewBastionService(nil, nil, onlineSSMMock())
+
+	err := svc.WaitForSSMReady(context.Background(), &WaitForSSMReadyInput{
+		InstanceID: "i-abc001",
+		Region:     "ap-southeast-2",
+	})
+	if err != nil {
+		t.Fatalf("expected nil error, got: %v", err)
+	}
+}
+
+func Test_BastionService_WaitForSSMReady_Timeout_ReturnsError(t *testing.T) {
+	svc := NewBastionService(nil, nil, neverOnlineSSMMock())
+
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+
+	err := svc.WaitForSSMReady(ctx, &WaitForSSMReadyInput{
+		InstanceID: "i-abc001",
+		Region:     "ap-southeast-2",
+	})
+	if err == nil {
+		t.Fatal("expected timeout error, got nil")
+	}
+}
+
+func Test_BastionService_WaitForSSMReady_SSMError_Propagated(t *testing.T) {
+	ssmErr := errors.New("ssm unavailable")
+	svc := NewBastionService(nil, nil, &mockSSMClient{
+		DescribeInstanceInformationFn: func(_ context.Context, _ *ssm.DescribeInstanceInformationInput, _ ...func(*ssm.Options)) (*ssm.DescribeInstanceInformationOutput, error) {
+			return nil, ssmErr
+		},
 	})
 
-	if !errors.Is(err, uploadErr) {
-		t.Errorf("expected uploadErr to be wrapped in returned error, got: %v", err)
+	err := svc.WaitForSSMReady(context.Background(), &WaitForSSMReadyInput{
+		InstanceID: "i-abc001",
+		Region:     "ap-southeast-2",
+	})
+	if !errors.Is(err, ssmErr) {
+		t.Errorf("expected ssmErr to be wrapped, got: %v", err)
 	}
 }

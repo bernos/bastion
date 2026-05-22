@@ -17,7 +17,7 @@ func newTestCmd() *cobra.Command {
 	cmd.Flags().String("owner", "", "")
 	cmd.Flags().String("subnet-id", "", "")
 	cmd.Flags().String("vpc-id", "", "")
-	cmd.Flags().String("public-key-path", "", "")
+	cmd.Flags().String("region", "", "")
 	return cmd
 }
 
@@ -238,9 +238,9 @@ func TestInitialize_ExplicitMissingConfigFile_Error(t *testing.T) {
 	}
 }
 
-func TestInitialize_PublicKeyPath_FromFlag(t *testing.T) {
+func TestInitialize_Region_FromFlag(t *testing.T) {
 	cmd := newTestCmd()
-	if err := cmd.Flags().Set("public-key-path", "/path/to/key.pub"); err != nil {
+	if err := cmd.Flags().Set("region", "ap-southeast-2"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -249,26 +249,26 @@ func TestInitialize_PublicKeyPath_FromFlag(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if cfg.PublicKeyPath != "/path/to/key.pub" {
-		t.Errorf("PublicKeyPath: want %q, got %q", "/path/to/key.pub", cfg.PublicKeyPath)
+	if cfg.Region != "ap-southeast-2" {
+		t.Errorf("Region: want %q, got %q", "ap-southeast-2", cfg.Region)
 	}
 }
 
-func TestInitialize_PublicKeyPath_FromEnvVar(t *testing.T) {
-	t.Setenv("BASTION_PUBLIC_KEY_PATH", "/env/path/key.pub")
+func TestInitialize_Region_FromEnvVar(t *testing.T) {
+	t.Setenv("BASTION_REGION", "us-east-1")
 
 	cfg := &config.Config{}
 	if err := config.Initialize(cfg, viper.New(), newTestCmd()); err != nil {
 		t.Fatal(err)
 	}
 
-	if cfg.PublicKeyPath != "/env/path/key.pub" {
-		t.Errorf("PublicKeyPath: want %q, got %q", "/env/path/key.pub", cfg.PublicKeyPath)
+	if cfg.Region != "us-east-1" {
+		t.Errorf("Region: want %q, got %q", "us-east-1", cfg.Region)
 	}
 }
 
-func TestInitialize_PublicKeyPath_FromConfigFile(t *testing.T) {
-	cfgFile := writeTempConfig(t, `public-key-path: /file/path/key.pub`)
+func TestInitialize_Region_FromConfigFile(t *testing.T) {
+	cfgFile := writeTempConfig(t, `region: eu-west-1`)
 	v := viper.New()
 	v.SetConfigFile(cfgFile)
 
@@ -277,19 +277,19 @@ func TestInitialize_PublicKeyPath_FromConfigFile(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if cfg.PublicKeyPath != "/file/path/key.pub" {
-		t.Errorf("PublicKeyPath: want %q, got %q", "/file/path/key.pub", cfg.PublicKeyPath)
+	if cfg.Region != "eu-west-1" {
+		t.Errorf("Region: want %q, got %q", "eu-west-1", cfg.Region)
 	}
 }
 
-func TestInitialize_PublicKeyPath_OmittedIsEmpty(t *testing.T) {
+func TestInitialize_Region_OmittedIsEmpty(t *testing.T) {
 	cfg := &config.Config{}
 	if err := config.Initialize(cfg, viper.New(), newTestCmd()); err != nil {
 		t.Fatal(err)
 	}
 
-	if cfg.PublicKeyPath != "" {
-		t.Errorf("PublicKeyPath: want empty string, got %q", cfg.PublicKeyPath)
+	if cfg.Region != "" {
+		t.Errorf("Region: want empty string, got %q", cfg.Region)
 	}
 }
 

@@ -42,7 +42,17 @@ func NewRootCommand(cfg *config.Config) (*cobra.Command, error) {
 		return nil, err
 	}
 
-	cmd.AddCommand(up, down)
+	sshCmd, err := NewSSHCommand(cfg)
+	if err != nil {
+		return nil, err
+	}
+
+	proxyCmd, err := NewProxyCommand(cfg)
+	if err != nil {
+		return nil, err
+	}
+
+	cmd.AddCommand(up, down, sshCmd, proxyCmd)
 
 	cmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file")
 

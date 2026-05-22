@@ -17,6 +17,7 @@ type CloudFormationService interface {
 	Deploy(ctx context.Context, input *DeployInput, opts ...func(*DeployOptions)) (*DeployOutput, error)
 	DeleteStack(ctx context.Context, stackName string) error
 	StackExists(ctx context.Context, stackName string) (bool, error)
+	GetStackOutputs(ctx context.Context, stackName string) (map[string]string, error)
 }
 
 type cloudFormationService struct {
@@ -479,6 +480,23 @@ func (s *cloudFormationService) StackExists(ctx context.Context, stackName strin
 	}
 
 	return true, nil
+}
+
+func (s *cloudFormationService) GetStackOutputs(ctx context.Context, stackName string) (map[string]string, error) {
+	out, err := s.client.DescribeStacks(ctx, &cloudformation.DescribeStacksInput{
+		StackName: aws.String(stackName),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("describing stack %s: %w", stackName, err)
+	}
+	if len(out.Stacks) == 0 {
+		return nil, fmt.Errorf("stack %s not found", stackName)
+	}
+	outputs := make(map[string]string, len(out.Stacks[0].Outputs))
+	for _, o := range out.Stacks[0].Outputs {
+		outputs[aws.ToString(o.OutputKey)] = aws.ToString(o.OutputValue)
+	}
+	return outputs, nil
 }
 
 func (s *cloudFormationService) calculateChangeSetType(ctx context.Context, input *DeployInput) (types.ChangeSetType, error) {

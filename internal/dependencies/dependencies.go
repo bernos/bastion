@@ -15,6 +15,7 @@ import (
 )
 
 type Dependencies struct {
+	cfg                  *config.Config
 	awsConfig            *aws.Config
 	cloudFormationClient *cloudformation.Client
 	stsClient            *sts.Client
@@ -22,7 +23,7 @@ type Dependencies struct {
 }
 
 func New(cfg *config.Config) *Dependencies {
-	return &Dependencies{}
+	return &Dependencies{cfg: cfg}
 }
 
 func (d *Dependencies) AwsConfig(ctx context.Context) (aws.Config, error) {
@@ -30,7 +31,7 @@ func (d *Dependencies) AwsConfig(ctx context.Context) (aws.Config, error) {
 		return *d.awsConfig, nil
 	}
 
-	c, err := awsconfig.LoadDefaultConfig(ctx)
+	c, err := awsconfig.LoadDefaultConfig(ctx, awsconfig.WithRegion(d.cfg.Region))
 	if err != nil {
 		return aws.Config{}, err
 	}
