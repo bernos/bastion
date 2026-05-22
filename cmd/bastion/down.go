@@ -24,7 +24,7 @@ func NewDownCommand(cfg *config.Config) (*cobra.Command, error) {
 				return err
 			}
 
-			return runDown(cmd, cfg.Name, cfg.Region, svc)
+			return runDown(cmd, cfg.Name, svc)
 		},
 	}
 
@@ -40,10 +40,9 @@ func NewDownCommand(cfg *config.Config) (*cobra.Command, error) {
 	return cmd, nil
 }
 
-func runDown(cmd *cobra.Command, name, region string, svc bastion.BastionService) error {
+func runDown(cmd *cobra.Command, name string, svc bastion.BastionService) error {
 	if err := svc.DeleteBastion(cmd.Context(), &bastion.DeleteBastionInput{
 		BastionName: name,
-		Region:      region,
 	}); err != nil {
 		return err
 	}

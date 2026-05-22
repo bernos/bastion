@@ -252,7 +252,6 @@ func Test_BastionService_DescribeBastion_ReturnsInstanceDetails(t *testing.T) {
 
 	out, err := svc.DescribeBastion(context.Background(), &DescribeBastionInput{
 		BastionName: "my-bastion",
-		Region:      "ap-southeast-2",
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -263,9 +262,6 @@ func Test_BastionService_DescribeBastion_ReturnsInstanceDetails(t *testing.T) {
 	}
 	if out.AvailabilityZone != "ap-southeast-2a" {
 		t.Errorf("AvailabilityZone: want %q, got %q", "ap-southeast-2a", out.AvailabilityZone)
-	}
-	if out.Region != "ap-southeast-2" {
-		t.Errorf("Region: want %q, got %q", "ap-southeast-2", out.Region)
 	}
 }
 
@@ -280,7 +276,6 @@ func Test_BastionService_DescribeBastion_StackNotFound_ReturnsError(t *testing.T
 
 	_, err := svc.DescribeBastion(context.Background(), &DescribeBastionInput{
 		BastionName: "missing",
-		Region:      "ap-southeast-2",
 	})
 	if err == nil {
 		t.Fatal("expected error for missing stack, got nil")
@@ -292,7 +287,6 @@ func Test_BastionService_WaitForSSMReady_OnlineImmediately_ReturnsNil(t *testing
 
 	err := svc.WaitForSSMReady(context.Background(), &WaitForSSMReadyInput{
 		InstanceID: "i-abc001",
-		Region:     "ap-southeast-2",
 	})
 	if err != nil {
 		t.Fatalf("expected nil error, got: %v", err)
@@ -307,7 +301,6 @@ func Test_BastionService_WaitForSSMReady_Timeout_ReturnsError(t *testing.T) {
 
 	err := svc.WaitForSSMReady(ctx, &WaitForSSMReadyInput{
 		InstanceID: "i-abc001",
-		Region:     "ap-southeast-2",
 	})
 	if err == nil {
 		t.Fatal("expected timeout error, got nil")
@@ -324,7 +317,6 @@ func Test_BastionService_WaitForSSMReady_SSMError_Propagated(t *testing.T) {
 
 	err := svc.WaitForSSMReady(context.Background(), &WaitForSSMReadyInput{
 		InstanceID: "i-abc001",
-		Region:     "ap-southeast-2",
 	})
 	if !errors.Is(err, ssmErr) {
 		t.Errorf("expected ssmErr to be wrapped, got: %v", err)

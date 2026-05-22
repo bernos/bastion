@@ -48,7 +48,7 @@ func Test_runConnect_WaitForSSMReadyError_Propagated(t *testing.T) {
 
 	svc := &mockBastionService{
 		DescribeBastionFn: func(_ context.Context, _ *bastion.DescribeBastionInput) (*bastion.DescribeBastionOutput, error) {
-			return &bastion.DescribeBastionOutput{InstanceID: "i-abc001", AvailabilityZone: "ap-southeast-2a", Region: "ap-southeast-2"}, nil
+			return &bastion.DescribeBastionOutput{InstanceID: "i-abc001", AvailabilityZone: "ap-southeast-2a"}, nil
 		},
 		WaitForSSMReadyFn: func(_ context.Context, _ *bastion.WaitForSSMReadyInput) error {
 			return ssmErr
@@ -66,7 +66,7 @@ func Test_runConnect_KeyUploadError_Propagated(t *testing.T) {
 
 	svc := &mockBastionService{
 		DescribeBastionFn: func(_ context.Context, _ *bastion.DescribeBastionInput) (*bastion.DescribeBastionOutput, error) {
-			return &bastion.DescribeBastionOutput{InstanceID: "i-abc001", AvailabilityZone: "ap-southeast-2a", Region: "ap-southeast-2"}, nil
+			return &bastion.DescribeBastionOutput{InstanceID: "i-abc001", AvailabilityZone: "ap-southeast-2a"}, nil
 		},
 		WaitForSSMReadyFn: func(_ context.Context, _ *bastion.WaitForSSMReadyInput) error {
 			return nil
@@ -89,7 +89,7 @@ func Test_runConnect_KeyUpload_UsesCorrectInstanceDetails(t *testing.T) {
 
 	svc := &mockBastionService{
 		DescribeBastionFn: func(_ context.Context, _ *bastion.DescribeBastionInput) (*bastion.DescribeBastionOutput, error) {
-			return &bastion.DescribeBastionOutput{InstanceID: "i-abc001", AvailabilityZone: "ap-southeast-2a", Region: "ap-southeast-2"}, nil
+			return &bastion.DescribeBastionOutput{InstanceID: "i-abc001", AvailabilityZone: "ap-southeast-2a"}, nil
 		},
 		WaitForSSMReadyFn: func(_ context.Context, _ *bastion.WaitForSSMReadyInput) error {
 			return nil

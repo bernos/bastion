@@ -65,7 +65,6 @@ type DeployBastionInput struct {
 	AMIParameterName string
 	InstanceType     string
 	VPCID            string
-	Region           string
 }
 
 type DeployBastionOutput struct {
@@ -76,23 +75,19 @@ type DeployBastionOutput struct {
 
 type DeleteBastionInput struct {
 	BastionName string
-	Region      string
 }
 
 type DescribeBastionInput struct {
 	BastionName string
-	Region      string
 }
 
 type DescribeBastionOutput struct {
 	InstanceID       string
 	AvailabilityZone string
-	Region           string
 }
 
 type WaitForSSMReadyInput struct {
 	InstanceID string
-	Region     string
 }
 
 func (svc *bastionService) DeployBastion(ctx context.Context, input *DeployBastionInput) (*DeployBastionOutput, error) {
@@ -171,7 +166,6 @@ func (svc *bastionService) DescribeBastion(ctx context.Context, input *DescribeB
 	return &DescribeBastionOutput{
 		InstanceID:       outputs["InstanceId"],
 		AvailabilityZone: outputs["AvailabilityZone"],
-		Region:           input.Region,
 	}, nil
 }
 

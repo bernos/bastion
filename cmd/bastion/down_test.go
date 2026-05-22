@@ -56,15 +56,12 @@ func Test_runDown_Success(t *testing.T) {
 	cmd := &cobra.Command{}
 	cmd.SetOut(&buf)
 
-	if err := runDown(cmd, "my-bastion", "ap-southeast-2", svc); err != nil {
+	if err := runDown(cmd, "my-bastion", svc); err != nil {
 		t.Fatal(err)
 	}
 
 	if capturedInput.BastionName != "my-bastion" {
 		t.Errorf("BastionName: want %q, got %q", "my-bastion", capturedInput.BastionName)
-	}
-	if capturedInput.Region != "ap-southeast-2" {
-		t.Errorf("Region: want %q, got %q", "ap-southeast-2", capturedInput.Region)
 	}
 
 	// runDown writes to os.Stdout directly; buf may be empty here.
@@ -82,7 +79,7 @@ func Test_runDown_ServiceError_Propagated(t *testing.T) {
 
 	cmd := &cobra.Command{}
 
-	err := runDown(cmd, "missing", "ap-southeast-2", svc)
+	err := runDown(cmd, "missing", svc)
 	if !errors.Is(err, deleteErr) {
 		t.Errorf("expected deleteErr to be wrapped in returned error, got: %v", err)
 	}

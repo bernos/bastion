@@ -30,7 +30,6 @@ func NewUpCommand(cfg *config.Config) (*cobra.Command, error) {
 				Owner:       cfg.Owner,
 				SubnetID:    cfg.SubnetID,
 				VPCID:       cfg.VPCID,
-				Region:      cfg.Region,
 			})
 			if err != nil {
 				return err

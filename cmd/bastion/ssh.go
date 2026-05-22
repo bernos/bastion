@@ -61,7 +61,6 @@ func runConnect(cmd *cobra.Command, name, region string, svc bastion.BastionServ
 
 	described, err := svc.DescribeBastion(ctx, &bastion.DescribeBastionInput{
 		BastionName: name,
-		Region:      region,
 	})
 	if err != nil {
 		return err
@@ -69,7 +68,6 @@ func runConnect(cmd *cobra.Command, name, region string, svc bastion.BastionServ
 
 	if err := svc.WaitForSSMReady(ctx, &bastion.WaitForSSMReadyInput{
 		InstanceID: described.InstanceID,
-		Region:     region,
 	}); err != nil {
 		return err
 	}
