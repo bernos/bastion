@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	ec2ic "github.com/aws/aws-sdk-go-v2/service/ec2instanceconnect"
@@ -106,7 +107,7 @@ func runConnect(cmd *cobra.Command, name, region string, svc bastion.BastionServ
 	}
 
 	sshArgs := buildSSHArgs(described.InstanceID, region, keyPath, extraSSHArgs)
-	sshCmd := exec.CommandContext(ctx, "ssh", sshArgs...)
+	sshCmd := exec.Command("ssh", sshArgs...)
 	sshCmd.Stdin = os.Stdin
 	sshCmd.Stdout = os.Stdout
 	sshCmd.Stderr = os.Stderr
@@ -115,22 +116,25 @@ func runConnect(cmd *cobra.Command, name, region string, svc bastion.BastionServ
 		return fmt.Errorf("starting ssh: %w", err)
 	}
 
-	// Forward SIGINT and SIGTERM to the ssh child so both interactive sessions
-	// and proxy mode shut down cleanly on Ctrl-C or SIGTERM.
+	// Single shutdown path for both signals and context cancellation.
+	// Using exec.Command (not CommandContext) so this goroutine is the sole
+	// arbiter: signals are forwarded gracefully; context cancellation sends
+	// SIGTERM and escalates to SIGKILL after a grace period.
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)
 	go func() {
-		for sig := range sigCh {
-			if sshCmd.Process != nil {
-				_ = sshCmd.Process.Signal(sig)
-			}
+		defer signal.Stop(sigCh)
+		select {
+		case sig := <-sigCh:
+			_ = sshCmd.Process.Signal(sig)
+		case <-ctx.Done():
+			_ = sshCmd.Process.Signal(syscall.SIGTERM)
+			time.Sleep(5 * time.Second)
+			_ = sshCmd.Process.Kill()
 		}
 	}()
 
-	err = sshCmd.Wait()
-	signal.Stop(sigCh)
-	close(sigCh)
-	return err
+	return sshCmd.Wait()
 }
 
 type ec2icSender interface {
