@@ -96,7 +96,7 @@ type WaitForSSMReadyInput struct {
 }
 
 func (svc *bastionService) DeployBastion(ctx context.Context, input *DeployBastionInput) (*DeployBastionOutput, error) {
-	id, err := gonanoid.New(8)
+	id, err := gonanoid.Generate("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789", 8)
 	if err != nil {
 		return nil, err
 	}
