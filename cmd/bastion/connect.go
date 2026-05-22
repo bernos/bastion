@@ -47,6 +47,9 @@ func buildSSHArgs(instanceID, region, keyFile string, extraArgs []string) []stri
 		region,
 	)
 
+	// The SSH target is an EC2 instance ID (e.g. i-0abc123), not a real hostname,
+	// so it will never match a known_hosts entry. Disable host key checking to
+	// avoid polluting known_hosts with ephemeral instance IDs.
 	args := []string{
 		"-i", keyFile,
 		"-o", "StrictHostKeyChecking=no",
