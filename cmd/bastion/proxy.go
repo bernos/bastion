@@ -34,10 +34,11 @@ func NewProxyCommand(cfg *config.Config) (*cobra.Command, error) {
 				return err
 			}
 
-			fmt.Fprintf(os.Stderr, "SOCKS5 proxy on localhost:%d via bastion %q — Ctrl-C to stop\n", port, cfg.Name)
-
 			extraArgs := []string{"-D", fmt.Sprintf("%d", port), "-N"}
-			return runConnect(cmd, cfg.Name, cfg.Region, svc, ec2ic.NewFromConfig(awsCfg), extraArgs)
+			onReady := func() {
+				fmt.Fprintf(os.Stderr, "SOCKS5 proxy on localhost:%d via bastion %q — Ctrl-C to stop\n", port, cfg.Name)
+			}
+			return runConnect(cmd, cfg.Name, cfg.Region, svc, ec2ic.NewFromConfig(awsCfg), extraArgs, onReady)
 		},
 	}
 

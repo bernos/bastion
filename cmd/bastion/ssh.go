@@ -39,7 +39,7 @@ func NewSSHCommand(cfg *config.Config) (*cobra.Command, error) {
 				return err
 			}
 
-			return runConnect(cmd, cfg.Name, cfg.Region, svc, ec2ic.NewFromConfig(awsCfg), nil)
+			return runConnect(cmd, cfg.Name, cfg.Region, svc, ec2ic.NewFromConfig(awsCfg), nil, nil)
 		},
 	}
 
@@ -57,7 +57,8 @@ func NewSSHCommand(cfg *config.Config) (*cobra.Command, error) {
 
 // runConnect is the shared connection flow for both ssh and proxy commands.
 // extraSSHArgs are inserted before the target (e.g. ["-D", "1080", "-N"] for proxy).
-func runConnect(cmd *cobra.Command, name, region string, svc bastion.BastionService, ec2icClient ec2icSender, extraSSHArgs []string) error {
+// onReady, if non-nil, is called after the bastion is reachable but before exec.
+func runConnect(cmd *cobra.Command, name, region string, svc bastion.BastionService, ec2icClient ec2icSender, extraSSHArgs []string, onReady func()) error {
 	ctx := cmd.Context()
 
 	described, err := svc.DescribeBastion(ctx, &bastion.DescribeBastionInput{
@@ -71,6 +72,10 @@ func runConnect(cmd *cobra.Command, name, region string, svc bastion.BastionServ
 		InstanceID: described.InstanceID,
 	}); err != nil {
 		return err
+	}
+
+	if onReady != nil {
+		onReady()
 	}
 
 	privateKeyPEM, publicKey, err := generateEphemeralKeyPair()
