@@ -3,7 +3,6 @@ package main
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"testing"
 
@@ -12,8 +11,10 @@ import (
 )
 
 type mockBastionService struct {
-	DeleteBastionFn func(context.Context, *bastion.DeleteBastionInput) error
-	DeployBastionFn func(context.Context, *bastion.DeployBastionInput) (*bastion.DeployBastionOutput, error)
+	DeleteBastionFn   func(context.Context, *bastion.DeleteBastionInput) error
+	DeployBastionFn   func(context.Context, *bastion.DeployBastionInput) (*bastion.DeployBastionOutput, error)
+	DescribeBastionFn func(context.Context, *bastion.DescribeBastionInput) (*bastion.DescribeBastionOutput, error)
+	WaitForSSMReadyFn func(context.Context, *bastion.WaitForSSMReadyInput) error
 }
 
 func (m *mockBastionService) DeleteBastion(ctx context.Context, input *bastion.DeleteBastionInput) error {
@@ -21,15 +22,32 @@ func (m *mockBastionService) DeleteBastion(ctx context.Context, input *bastion.D
 }
 
 func (m *mockBastionService) DeployBastion(ctx context.Context, input *bastion.DeployBastionInput) (*bastion.DeployBastionOutput, error) {
-	return m.DeployBastionFn(ctx, input)
+	if m.DeployBastionFn != nil {
+		return m.DeployBastionFn(ctx, input)
+	}
+	return &bastion.DeployBastionOutput{}, nil
+}
+
+func (m *mockBastionService) DescribeBastion(ctx context.Context, input *bastion.DescribeBastionInput) (*bastion.DescribeBastionOutput, error) {
+	if m.DescribeBastionFn != nil {
+		return m.DescribeBastionFn(ctx, input)
+	}
+	return &bastion.DescribeBastionOutput{}, nil
+}
+
+func (m *mockBastionService) WaitForSSMReady(ctx context.Context, input *bastion.WaitForSSMReadyInput) error {
+	if m.WaitForSSMReadyFn != nil {
+		return m.WaitForSSMReadyFn(ctx, input)
+	}
+	return nil
 }
 
 func Test_runDown_Success(t *testing.T) {
-	var capturedName string
+	var capturedInput *bastion.DeleteBastionInput
 
 	svc := &mockBastionService{
 		DeleteBastionFn: func(_ context.Context, input *bastion.DeleteBastionInput) error {
-			capturedName = input.BastionName
+			capturedInput = input
 			return nil
 		},
 	}
@@ -42,17 +60,12 @@ func Test_runDown_Success(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if capturedName != "my-bastion" {
-		t.Errorf("BastionName: want %q, got %q", "my-bastion", capturedName)
+	if capturedInput.BastionName != "my-bastion" {
+		t.Errorf("BastionName: want %q, got %q", "my-bastion", capturedInput.BastionName)
 	}
 
-	var out struct {
-		StackName string `json:"stackName"`
-	}
-	if err := json.NewDecoder(&buf).Decode(&out); err != nil {
-		// runDown writes to os.Stdout directly, so buf may be empty — verify via stdout capture separately
-		// This exercises the error-free path at minimum.
-	}
+	// runDown writes to os.Stdout directly; buf may be empty here.
+	// The error-free path is exercised by the call above.
 }
 
 func Test_runDown_ServiceError_Propagated(t *testing.T) {

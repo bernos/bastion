@@ -36,6 +36,8 @@ type ssmClient interface {
 type BastionService interface {
 	DeployBastion(context.Context, *DeployBastionInput) (*DeployBastionOutput, error)
 	DeleteBastion(context.Context, *DeleteBastionInput) error
+	DescribeBastion(context.Context, *DescribeBastionInput) (*DescribeBastionOutput, error)
+	WaitForSSMReady(context.Context, *WaitForSSMReadyInput) error
 }
 
 type bastionService struct {
@@ -56,10 +58,6 @@ func NewBastionService(
 	}
 }
 
-type DeleteBastionInput struct {
-	BastionName string
-}
-
 type DeployBastionInput struct {
 	BastionName      string
 	Owner            string
@@ -67,7 +65,6 @@ type DeployBastionInput struct {
 	AMIParameterName string
 	InstanceType     string
 	VPCID            string
-	PublicKeyContent string
 }
 
 type DeployBastionOutput struct {
@@ -76,8 +73,25 @@ type DeployBastionOutput struct {
 	AvailabilityZone string
 }
 
+type DeleteBastionInput struct {
+	BastionName string
+}
+
+type DescribeBastionInput struct {
+	BastionName string
+}
+
+type DescribeBastionOutput struct {
+	InstanceID       string
+	AvailabilityZone string
+}
+
+type WaitForSSMReadyInput struct {
+	InstanceID string
+}
+
 func (svc *bastionService) DeployBastion(ctx context.Context, input *DeployBastionInput) (*DeployBastionOutput, error) {
-	id, err := gonanoid.New(8)
+	id, err := gonanoid.Generate("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789", 8)
 	if err != nil {
 		return nil, err
 	}
@@ -124,20 +138,6 @@ func (svc *bastionService) DeployBastion(ctx context.Context, input *DeployBasti
 		}
 	}
 
-	if input.PublicKeyContent != "" {
-		if err := svc.waitForSSMReady(ctx, result.InstanceID); err != nil {
-			return nil, err
-		}
-		if _, err := svc.ec2ic.SendSSHPublicKey(ctx, &ec2ic.SendSSHPublicKeyInput{
-			InstanceId:       aws.String(result.InstanceID),
-			InstanceOSUser:   aws.String("ec2-user"),
-			SSHPublicKey:     aws.String(input.PublicKeyContent),
-			AvailabilityZone: aws.String(result.AvailabilityZone),
-		}); err != nil {
-			return nil, fmt.Errorf("uploading SSH public key: %w", err)
-		}
-	}
-
 	return result, nil
 }
 
@@ -155,7 +155,21 @@ func (svc *bastionService) DeleteBastion(ctx context.Context, input *DeleteBasti
 	return svc.cloudFormationService.DeleteStack(ctx, stackName)
 }
 
-func (svc *bastionService) waitForSSMReady(ctx context.Context, instanceID string) error {
+func (svc *bastionService) DescribeBastion(ctx context.Context, input *DescribeBastionInput) (*DescribeBastionOutput, error) {
+	stackName := fmt.Sprintf("%s-stack", input.BastionName)
+
+	outputs, err := svc.cloudFormationService.GetStackOutputs(ctx, stackName)
+	if err != nil {
+		return nil, fmt.Errorf("describing bastion %q: %w", input.BastionName, err)
+	}
+
+	return &DescribeBastionOutput{
+		InstanceID:       outputs["InstanceId"],
+		AvailabilityZone: outputs["AvailabilityZone"],
+	}, nil
+}
+
+func (svc *bastionService) WaitForSSMReady(ctx context.Context, input *WaitForSSMReadyInput) error {
 	ctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
 	defer cancel()
 
@@ -165,7 +179,7 @@ func (svc *bastionService) waitForSSMReady(ctx context.Context, instanceID strin
 	check := func() (bool, error) {
 		out, err := svc.ssm.DescribeInstanceInformation(ctx, &ssm.DescribeInstanceInformationInput{
 			InstanceInformationFilterList: []ssmtypes.InstanceInformationFilter{
-				{Key: ssmtypes.InstanceInformationFilterKeyInstanceIds, ValueSet: []string{instanceID}},
+				{Key: ssmtypes.InstanceInformationFilterKeyInstanceIds, ValueSet: []string{input.InstanceID}},
 			},
 		})
 		if err != nil {
@@ -179,7 +193,6 @@ func (svc *bastionService) waitForSSMReady(ctx context.Context, instanceID strin
 		return false, nil
 	}
 
-	// Check immediately before waiting for the first tick.
 	if ready, err := check(); err != nil || ready {
 		return err
 	}
@@ -187,7 +200,7 @@ func (svc *bastionService) waitForSSMReady(ctx context.Context, instanceID strin
 	for {
 		select {
 		case <-ctx.Done():
-			return fmt.Errorf("timed out waiting for SSM agent on instance %s to come online: check SSM Fleet Manager for details", instanceID)
+			return fmt.Errorf("timed out waiting for SSM agent on instance %s to come online: check SSM Fleet Manager for details", input.InstanceID)
 		case <-ticker.C:
 			if ready, err := check(); err != nil || ready {
 				return err

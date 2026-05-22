@@ -3,7 +3,7 @@ set -euo pipefail
 
 VPC_STACK="${VPC_STACK:-bastion-test-vpc}"
 BASTION_NAME="${BASTION_NAME:-bastion-test}"
-PUBLIC_KEY_PATH="${PUBLIC_KEY_PATH:-$HOME/.ssh/id_ed25519.pub}"
+REGION="${REGION:-ap-southeast-2}"
 SSH_USER="${SSH_USER:-ec2-user}"
 OWNER="${OWNER:-bernos}"
 
@@ -32,14 +32,14 @@ bastion_json=$("$BASTION" up \
   --vpc-id "$vpc_id" \
   --subnet-id "$subnet_id" \
   --owner "$OWNER" \
-  --public-key-path "$PUBLIC_KEY_PATH")
+  --region "$REGION")
 
 instance_id=$(echo "$bastion_json" | jq -r '.instanceId')
 
 echo "Instance: ${instance_id}" >&2
-echo "Connecting..." >&2
+# echo "Connecting..." >&2
 
-ssh \
-  -o StrictHostKeyChecking=no \
-  -o ProxyCommand="aws ssm start-session --target %h --document-name AWS-StartSSHSession --parameters portNumber=%p" \
-  "${SSH_USER}@${instance_id}"
+# ssh \
+#   -o StrictHostKeyChecking=no \
+#   -o ProxyCommand="aws ssm start-session --target %h --document-name AWS-StartSSHSession --parameters portNumber=%p" \
+#   "${SSH_USER}@${instance_id}"

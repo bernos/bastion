@@ -279,6 +279,79 @@ func Test_CloudFormationService_DeleteStack(t *testing.T) {
 	}
 }
 
+func Test_CloudFormationService_GetStackOutputs(t *testing.T) {
+	cases := []struct {
+		name        string
+		setupMock   func(*mockCloudFormationClient)
+		wantOutputs map[string]string
+		wantError   bool
+	}{
+		{
+			name: "returns outputs keyed by OutputKey",
+			setupMock: func(m *mockCloudFormationClient) {
+				m.DescribeStacksFn = func(_ context.Context, _ *cloudformation.DescribeStacksInput, _ ...func(*cloudformation.Options)) (*cloudformation.DescribeStacksOutput, error) {
+					return &cloudformation.DescribeStacksOutput{
+						Stacks: []types.Stack{
+							{
+								Outputs: []types.Output{
+									{OutputKey: aws.String("InstanceId"), OutputValue: aws.String("i-abc001")},
+									{OutputKey: aws.String("AvailabilityZone"), OutputValue: aws.String("ap-southeast-2a")},
+								},
+							},
+						},
+					}, nil
+				}
+			},
+			wantOutputs: map[string]string{
+				"InstanceId":       "i-abc001",
+				"AvailabilityZone": "ap-southeast-2a",
+			},
+		},
+		{
+			name: "stack not found returns error",
+			setupMock: func(m *mockCloudFormationClient) {
+				m.DescribeStacksFn = func(_ context.Context, _ *cloudformation.DescribeStacksInput, _ ...func(*cloudformation.Options)) (*cloudformation.DescribeStacksOutput, error) {
+					return nil, fmt.Errorf("stack does not exist")
+				}
+			},
+			wantError: true,
+		},
+		{
+			name: "empty stacks list returns error",
+			setupMock: func(m *mockCloudFormationClient) {
+				m.DescribeStacksFn = func(_ context.Context, _ *cloudformation.DescribeStacksInput, _ ...func(*cloudformation.Options)) (*cloudformation.DescribeStacksOutput, error) {
+					return &cloudformation.DescribeStacksOutput{Stacks: []types.Stack{}}, nil
+				}
+			},
+			wantError: true,
+		},
+	}
+
+	for _, tt := range cases {
+		t.Run(tt.name, func(t *testing.T) {
+			mock := &mockCloudFormationClient{}
+			tt.setupMock(mock)
+			svc := &cloudFormationService{mock}
+
+			got, err := svc.GetStackOutputs(t.Context(), "test-stack")
+
+			if tt.wantError && err == nil {
+				t.Fatal("expected error but got none")
+			}
+			if !tt.wantError && err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if !tt.wantError {
+				for key, want := range tt.wantOutputs {
+					if got[key] != want {
+						t.Errorf("output %s: want %q, got %q", key, want, got[key])
+					}
+				}
+			}
+		})
+	}
+}
+
 func Test_CloudFormationService_StackExists(t *testing.T) {
 	cases := []struct {
 		name       string

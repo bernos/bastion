@@ -29,9 +29,12 @@ func NewDownCommand(cfg *config.Config) (*cobra.Command, error) {
 	}
 
 	cmd.Flags().String("name", "", "name of the bastion host to tear down")
+	cmd.Flags().String("region", "", "AWS region where the bastion is deployed")
 
-	if err := cmd.MarkFlagRequired("name"); err != nil {
-		return nil, err
+	for _, flag := range []string{"name", "region"} {
+		if err := cmd.MarkFlagRequired(flag); err != nil {
+			return nil, err
+		}
 	}
 
 	return cmd, nil

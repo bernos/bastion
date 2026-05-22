@@ -13,11 +13,11 @@ const (
 )
 
 type Config struct {
-	Name          string `mapstructure:"name"`
-	Owner         string `mapstructure:"owner"`
-	SubnetID      string `mapstructure:"subnet-id"`
-	VPCID         string `mapstructure:"vpc-id"`
-	PublicKeyPath string `mapstructure:"public-key-path"`
+	Name     string `mapstructure:"name"`
+	Owner    string `mapstructure:"owner"`
+	SubnetID string `mapstructure:"subnet-id"`
+	VPCID    string `mapstructure:"vpc-id"`
+	Region   string `mapstructure:"region"`
 }
 
 func Initialize(cfg *Config, v *viper.Viper, cmd *cobra.Command) error {
