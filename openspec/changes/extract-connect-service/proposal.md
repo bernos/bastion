@@ -5,7 +5,7 @@ The connection logic in `cmd/bastion/connect.go` and `ssh.go` — key generation
 ## What Changes
 
 - **New** `internal/connect/` package exposing a `ConnectService` interface
-- `ConnectService.Prepare` handles: dependency checking, `DescribeBastion`, `WaitForSSMReady`, ephemeral key generation, EC2IC key upload, temp file creation, and SSH arg assembly — returning a `*Connection` the caller uses to exec `ssh`
+- `ConnectService.Prepare` handles: `DescribeBastion`, `WaitForSSMReady`, ephemeral key generation, EC2IC key upload, writing the private key to a caller-provided file, and SSH arg assembly — returning a `*Connection` the caller uses to exec `ssh`
 - `cmd/bastion/connect.go` and the shared logic in `ssh.go` (`runConnect`, `buildSSHArgs`, `generateEphemeralKeyPair`, `checkSSMDependencies`, `ec2icSender` interface) are removed from the `cmd` package
 - `NewSSHCommand` and `NewProxyCommand` are updated to construct a `ConnectService` via `dependencies` and call `Prepare`, then exec `ssh` with the returned args
 - Unit tests for `ConnectService.Prepare` are added; `connect_test.go` in `cmd` is updated to use the new service mock
@@ -13,7 +13,7 @@ The connection logic in `cmd/bastion/connect.go` and `ssh.go` — key generation
 ## Capabilities
 
 ### New Capabilities
-- `connect-service`: The `ConnectService` interface and `Prepare` method that orchestrates all pre-connection steps and returns ready-to-use SSH arguments and a temp key path
+- `connect-service`: The `ConnectService` interface and `Prepare` method that orchestrates all pre-connection steps and returns exec-ready SSH arguments
 
 ### Modified Capabilities
 <!-- No external behavior changes; bastion-ssh and bastion-proxy specs are unchanged -->
