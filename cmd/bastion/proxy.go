@@ -30,9 +30,8 @@ func NewProxyCommand(cfg *config.Config) (*cobra.Command, error) {
 				BastionName:  cfg.Name,
 				Region:       cfg.Region,
 				ExtraSSHArgs: []string{"-D", fmt.Sprintf("%d", port), "-N"},
-				OnReady: func() {
-					fmt.Fprintf(os.Stderr, "SOCKS5 proxy on localhost:%d via bastion %q — Ctrl-C to stop\n", port, cfg.Name)
-				},
+			}, func() {
+				fmt.Fprintf(os.Stderr, "SOCKS5 proxy on localhost:%d via bastion %q — Ctrl-C to stop\n", port, cfg.Name)
 			})
 		},
 	}

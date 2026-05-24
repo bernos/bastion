@@ -51,10 +51,6 @@ func (s *connectService) Prepare(ctx context.Context, input *PrepareInput) (*Con
 		return nil, err
 	}
 
-	if input.OnReady != nil {
-		input.OnReady()
-	}
-
 	privateKeyPEM, publicKey, err := generateEphemeralKeyPair()
 	if err != nil {
 		return nil, err

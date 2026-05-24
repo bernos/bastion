@@ -31,7 +31,7 @@ func NewSSHCommand(cfg *config.Config) (*cobra.Command, error) {
 			return runConnect(cmd, connectSvc, &connect.PrepareInput{
 				BastionName: cfg.Name,
 				Region:      cfg.Region,
-			})
+			}, nil)
 		},
 	}
 
@@ -49,7 +49,7 @@ func NewSSHCommand(cfg *config.Config) (*cobra.Command, error) {
 
 // runConnect is the shared exec flow for both ssh and proxy commands.
 // It calls CheckDependencies, Prepare, then execs ssh with the returned args.
-func runConnect(cmd *cobra.Command, connectSvc connect.ConnectService, input *connect.PrepareInput) error {
+func runConnect(cmd *cobra.Command, connectSvc connect.ConnectService, input *connect.PrepareInput, onReady func()) error {
 	ctx := cmd.Context()
 
 	if err := connectSvc.CheckDependencies(); err != nil {
@@ -67,6 +67,10 @@ func runConnect(cmd *cobra.Command, connectSvc connect.ConnectService, input *co
 	conn, err := connectSvc.Prepare(ctx, input)
 	if err != nil {
 		return err
+	}
+
+	if onReady != nil {
+		onReady()
 	}
 
 	sshCmd := exec.Command("ssh", conn.SSHArgs...)

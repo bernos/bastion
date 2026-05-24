@@ -20,7 +20,6 @@ type PrepareInput struct {
 	Region         string
 	OSUser         string           // defaults to "ec2-user" if empty
 	ExtraSSHArgs   []string         // e.g. ["-D", "1080", "-N"] for proxy mode
-	OnReady        func()           // called after SSM ready, before key upload; nil is safe
 	PrivateKeyFile PrivateKeyWriter // caller-created file that receives the private key
 }
 

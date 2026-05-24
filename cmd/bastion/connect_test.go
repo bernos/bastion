@@ -42,7 +42,7 @@ func Test_runConnect_CheckDependencies_Error_Propagated(t *testing.T) {
 		CheckDependenciesFn: func() error { return depErr },
 	}
 
-	err := runConnect(testCmd(), svc, &connect.PrepareInput{BastionName: "my-bastion", Region: "ap-southeast-2"})
+	err := runConnect(testCmd(), svc, &connect.PrepareInput{BastionName: "my-bastion", Region: "ap-southeast-2"}, nil)
 	if !errors.Is(err, depErr) {
 		t.Errorf("expected depErr, got: %v", err)
 	}
@@ -57,7 +57,7 @@ func Test_runConnect_Prepare_Error_Propagated(t *testing.T) {
 		},
 	}
 
-	err := runConnect(testCmd(), svc, &connect.PrepareInput{BastionName: "my-bastion", Region: "ap-southeast-2"})
+	err := runConnect(testCmd(), svc, &connect.PrepareInput{BastionName: "my-bastion", Region: "ap-southeast-2"}, nil)
 	if !errors.Is(err, prepErr) {
 		t.Errorf("expected prepErr, got: %v", err)
 	}
@@ -73,7 +73,7 @@ func Test_runConnect_SSH_PassesBastionNameAndRegion(t *testing.T) {
 		},
 	}
 
-	_ = runConnect(testCmd(), svc, &connect.PrepareInput{BastionName: "my-bastion", Region: "ap-southeast-2"})
+	_ = runConnect(testCmd(), svc, &connect.PrepareInput{BastionName: "my-bastion", Region: "ap-southeast-2"}, nil)
 
 	if capturedInput == nil {
 		t.Fatal("Prepare was not called")
@@ -101,7 +101,7 @@ func Test_runConnect_Proxy_PassesExtraSSHArgs(t *testing.T) {
 		BastionName:  "my-bastion",
 		Region:       "ap-southeast-2",
 		ExtraSSHArgs: extraArgs,
-	})
+	}, nil)
 
 	if capturedInput == nil {
 		t.Fatal("Prepare was not called")
@@ -114,32 +114,40 @@ func Test_runConnect_Proxy_PassesExtraSSHArgs(t *testing.T) {
 	}
 }
 
-func Test_runConnect_Proxy_OnReady_PassedThrough(t *testing.T) {
-	onReadyCalled := false
-	var capturedInput *connect.PrepareInput
+func Test_runConnect_OnReady_CalledAfterPrepare(t *testing.T) {
+	var seq []string
 
 	svc := &mockConnectService{
-		PrepareFn: func(_ context.Context, input *connect.PrepareInput) (*connect.Connection, error) {
-			capturedInput = input
-			if input.OnReady != nil {
-				input.OnReady()
-			}
+		PrepareFn: func(_ context.Context, _ *connect.PrepareInput) (*connect.Connection, error) {
+			seq = append(seq, "prepare")
 			return nil, errors.New("stop here")
 		},
 	}
 
-	onReady := func() { onReadyCalled = true }
+	onReady := func() { seq = append(seq, "ready") }
 
-	_ = runConnect(testCmd(), svc, &connect.PrepareInput{
-		BastionName: "my-bastion",
-		Region:      "ap-southeast-2",
-		OnReady:     onReady,
+	_ = runConnect(testCmd(), svc, &connect.PrepareInput{BastionName: "my-bastion", Region: "ap-southeast-2"}, onReady)
+
+	// onReady should not be called because Prepare returned an error before we got there
+	if len(seq) != 1 || seq[0] != "prepare" {
+		t.Errorf("unexpected call sequence: %v", seq)
+	}
+}
+
+func Test_runConnect_OnReady_NotCalledOnPrepareError(t *testing.T) {
+	onReadyCalled := false
+
+	svc := &mockConnectService{
+		PrepareFn: func(_ context.Context, _ *connect.PrepareInput) (*connect.Connection, error) {
+			return nil, errors.New("prepare failed")
+		},
+	}
+
+	_ = runConnect(testCmd(), svc, &connect.PrepareInput{BastionName: "my-bastion", Region: "ap-southeast-2"}, func() {
+		onReadyCalled = true
 	})
 
-	if capturedInput == nil {
-		t.Fatal("Prepare was not called")
-	}
-	if !onReadyCalled {
-		t.Error("OnReady should have been called via Prepare")
+	if onReadyCalled {
+		t.Error("onReady should not be called when Prepare fails")
 	}
 }

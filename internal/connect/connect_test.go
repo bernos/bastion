@@ -228,63 +228,6 @@ func Test_Prepare_KeyUploadError_Propagated(t *testing.T) {
 	}
 }
 
-func Test_Prepare_OnReady_CalledAfterSSMReady(t *testing.T) {
-	var seq []string
-
-	svc := NewConnectService(&mockBastionService{
-		DescribeBastionFn: func(_ context.Context, _ *bastion.DescribeBastionInput) (*bastion.DescribeBastionOutput, error) {
-			return &bastion.DescribeBastionOutput{InstanceID: "i-abc001", AvailabilityZone: "ap-southeast-2a"}, nil
-		},
-		WaitForSSMReadyFn: func(_ context.Context, _ *bastion.WaitForSSMReadyInput) error {
-			seq = append(seq, "ssm")
-			return nil
-		},
-	}, &mockEC2ICSender{
-		SendSSHPublicKeyFn: func(_ context.Context, _ *ec2ic.SendSSHPublicKeyInput, _ ...func(*ec2ic.Options)) (*ec2ic.SendSSHPublicKeyOutput, error) {
-			seq = append(seq, "upload")
-			return nil, errors.New("stop here")
-		},
-	})
-
-	onReady := func() { seq = append(seq, "ready") }
-
-	_, _ = svc.Prepare(context.Background(), &PrepareInput{
-		BastionName:    "my-bastion",
-		Region:         "ap-southeast-2",
-		OnReady:        onReady,
-		PrivateKeyFile: noopKeyFile(),
-	})
-
-	want := []string{"ssm", "ready", "upload"}
-	if strings.Join(seq, ",") != strings.Join(want, ",") {
-		t.Errorf("call order: want %v, got %v", want, seq)
-	}
-}
-
-func Test_Prepare_OnReady_NotCalledOnSSMError(t *testing.T) {
-	onReadyCalled := false
-
-	svc := NewConnectService(&mockBastionService{
-		DescribeBastionFn: func(_ context.Context, _ *bastion.DescribeBastionInput) (*bastion.DescribeBastionOutput, error) {
-			return &bastion.DescribeBastionOutput{InstanceID: "i-abc001", AvailabilityZone: "ap-southeast-2a"}, nil
-		},
-		WaitForSSMReadyFn: func(_ context.Context, _ *bastion.WaitForSSMReadyInput) error {
-			return errors.New("ssm timeout")
-		},
-	}, &mockEC2ICSender{})
-
-	_, _ = svc.Prepare(context.Background(), &PrepareInput{
-		BastionName:    "my-bastion",
-		Region:         "ap-southeast-2",
-		OnReady:        func() { onReadyCalled = true },
-		PrivateKeyFile: noopKeyFile(),
-	})
-
-	if onReadyCalled {
-		t.Error("onReady should not be called when WaitForSSMReady fails")
-	}
-}
-
 func Test_Prepare_OSUser_DefaultsToEC2User(t *testing.T) {
 	var capturedInput *ec2ic.SendSSHPublicKeyInput
 
