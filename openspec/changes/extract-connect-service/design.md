@@ -27,17 +27,22 @@ The connection flow currently lives across two files in `cmd/bastion/`:
 ```go
 // internal/connect/connect.go
 
+type PrivateKeyWriter interface {
+    io.WriteCloser
+    Chmod(mode fs.FileMode) error
+    Name() string
+}
+
 type PrepareInput struct {
-    BastionName string
-    Region      string
-    OSUser      string   // defaults to "ec2-user" if empty
-    ExtraSSHArgs []string // e.g. ["-D", "1080", "-N"] for proxy mode
-    OnReady     func()   // called after SSM ready, before key upload; nil is safe
+    BastionName    string
+    Region         string
+    OSUser         string           // defaults to "ec2-user" if empty
+    ExtraSSHArgs   []string         // e.g. ["-D", "1080", "-N"] for proxy mode
+    PrivateKeyFile PrivateKeyWriter // caller-created file that receives the private key
 }
 
 type Connection struct {
     SSHArgs []string // full argument list ready to pass to exec.Command("ssh", ...)
-    KeyPath string   // path to the temp private key file; caller must remove after Wait()
 }
 
 type ConnectService interface {
@@ -46,11 +51,9 @@ type ConnectService interface {
 }
 ```
 
-`Prepare` encapsulates: `DescribeBastion` → `WaitForSSMReady` → `OnReady()` → key generation → EC2IC upload → temp file write → `buildSSHArgs`. It returns a `*Connection` the cmd layer uses to exec `ssh`.
+`Prepare` encapsulates: `DescribeBastion` → `WaitForSSMReady` → key generation → EC2IC upload → write private key to `input.PrivateKeyFile` → `buildSSHArgs`. It returns a `*Connection` the cmd layer uses to exec `ssh`.
 
 **Why not split Prepare into two steps?** The cmd layer has no use for partial state (instance ID, AZ) independently. One call returning exec-ready args keeps the command handlers minimal.
-
-**Why keep `OnReady` in the input struct?** The proxy status message must fire after SSM is confirmed but before exec. Accepting a callback keeps the timing contract inside the service without leaking SSM state to the caller.
 
 **Why keep exec in cmd?** Signal forwarding, stdin/stdout/stderr wiring, and `cmd.Wait()` are process-management concerns that belong with Cobra. Keeping them in cmd also means `Prepare` has a clean return path and is straightforwardly testable.
 
@@ -88,12 +91,13 @@ func NewConnectService(bastionSvc bastion.BastionService, ec2ic ec2icSender) Con
 
 ### What stays in cmd
 
+- `os.CreateTemp` to create the key file, passed in as `input.PrivateKeyFile`
+- `defer os.Remove(keyFile.Name())` to clean up after `cmd.Wait()`
 - `exec.Command("ssh", conn.SSHArgs...)` with stdin/stdout/stderr passthrough
 - Signal forwarding goroutine and context-cancellation escalation
-- `defer os.Remove(conn.KeyPath)`
+- `onReady()` callback (e.g. proxy status message) called between `Prepare` and exec
 - Cobra flag wiring
 
 ## Risks / Trade-offs
 
-- **Temp file lifetime crosses package boundary** — `Connection.KeyPath` is created inside the service but cleaned up by the caller. This is a deliberate trade-off: the caller controls the process lifetime and is the right place to hook cleanup to `cmd.Wait()`. The field name and the service docs make the ownership clear.
 - **`buildSSHArgs` tests move** — existing tests in `cmd/bastion/connect_test.go` that test `buildSSHArgs` will move to `internal/connect/connect_test.go`. The cmd-layer tests will be simplified to mock `ConnectService` at the interface boundary.

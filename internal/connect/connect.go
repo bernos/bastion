@@ -34,7 +34,7 @@ type ConnectService interface {
 	CheckDependencies() error
 
 	// Prepare resolves the bastion, waits for SSM readiness, generates an ephemeral
-	// key pair, uploads the public key via EC2 Instance Connect, and returns exec-ready
-	// SSH arguments along with the temp private key path.
+	// key pair, uploads the public key via EC2 Instance Connect, writes the private key
+	// to input.PrivateKeyFile, and returns exec-ready SSH arguments.
 	Prepare(ctx context.Context, input *PrepareInput) (*Connection, error)
 }
