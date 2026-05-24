@@ -1,11 +1,9 @@
 package main
 
 import (
-	"encoding/json"
-	"fmt"
 	"os"
 
-	"github.com/bernos/bastion/internal/bastion"
+	"github.com/bernos/bastion/internal/commands"
 	"github.com/bernos/bastion/internal/config"
 	"github.com/bernos/bastion/internal/dependencies"
 	"github.com/spf13/cobra"
@@ -24,7 +22,11 @@ func NewDownCommand(cfg *config.Config) (*cobra.Command, error) {
 				return err
 			}
 
-			return runDown(cmd, cfg.Name, svc)
+			c := commands.NewDownCommand(svc, os.Stdin, os.Stdout, os.Stderr)
+
+			return c.Run(ctx, &commands.DownInput{
+				BastionName: cfg.Name,
+			})
 		},
 	}
 
@@ -38,18 +40,4 @@ func NewDownCommand(cfg *config.Config) (*cobra.Command, error) {
 	}
 
 	return cmd, nil
-}
-
-func runDown(cmd *cobra.Command, name string, svc bastion.BastionService) error {
-	if err := svc.DeleteBastion(cmd.Context(), &bastion.DeleteBastionInput{
-		BastionName: name,
-	}); err != nil {
-		return err
-	}
-
-	return json.NewEncoder(os.Stdout).Encode(struct {
-		StackName string `json:"stackName"`
-	}{
-		StackName: fmt.Sprintf("%s-stack", name),
-	})
 }

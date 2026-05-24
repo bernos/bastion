@@ -1,12 +1,12 @@
-package main
+package commands
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"testing"
 
 	"github.com/bernos/bastion/internal/connect"
-	"github.com/spf13/cobra"
 )
 
 // mockConnectService satisfies connect.ConnectService for tests.
@@ -29,12 +29,6 @@ func (m *mockConnectService) Prepare(ctx context.Context, input *connect.Prepare
 	return &connect.Connection{SSHArgs: []string{"-V"}}, nil
 }
 
-func testCmd() *cobra.Command {
-	cmd := &cobra.Command{}
-	cmd.SetContext(context.Background())
-	return cmd
-}
-
 func Test_runConnect_CheckDependencies_Error_Propagated(t *testing.T) {
 	depErr := errors.New("aws not found")
 
@@ -42,7 +36,15 @@ func Test_runConnect_CheckDependencies_Error_Propagated(t *testing.T) {
 		CheckDependenciesFn: func() error { return depErr },
 	}
 
-	err := runConnect(testCmd(), svc, &connect.PrepareInput{BastionName: "my-bastion", Region: "ap-southeast-2"}, nil)
+	cmd := NewConnectCommand(svc, bytes.NewBufferString(""), &bytes.Buffer{}, &bytes.Buffer{})
+
+	input := &ConnectInput{
+		BastionName: "my-bastion",
+		Region:      "ap-southeast-2",
+	}
+
+	err := cmd.Run(context.Background(), input)
+	// err := runConnect(context.Background(), svc, &connect.PrepareInput{BastionName: "my-bastion", Region: "ap-southeast-2"}, nil)
 	if !errors.Is(err, depErr) {
 		t.Errorf("expected depErr, got: %v", err)
 	}
@@ -57,7 +59,16 @@ func Test_runConnect_Prepare_Error_Propagated(t *testing.T) {
 		},
 	}
 
-	err := runConnect(testCmd(), svc, &connect.PrepareInput{BastionName: "my-bastion", Region: "ap-southeast-2"}, nil)
+	cmd := NewConnectCommand(svc, bytes.NewBufferString(""), &bytes.Buffer{}, &bytes.Buffer{})
+
+	input := &ConnectInput{
+		BastionName: "my-bastion",
+		Region:      "ap-southeast-2",
+	}
+
+	err := cmd.Run(context.Background(), input)
+
+	// err := runConnect(context.Background(), svc, &connect.PrepareInput{BastionName: "my-bastion", Region: "ap-southeast-2"}, nil)
 	if !errors.Is(err, prepErr) {
 		t.Errorf("expected prepErr, got: %v", err)
 	}
@@ -73,7 +84,15 @@ func Test_runConnect_SSH_PassesBastionNameAndRegion(t *testing.T) {
 		},
 	}
 
-	_ = runConnect(testCmd(), svc, &connect.PrepareInput{BastionName: "my-bastion", Region: "ap-southeast-2"}, nil)
+	cmd := NewConnectCommand(svc, bytes.NewBufferString(""), &bytes.Buffer{}, &bytes.Buffer{})
+
+	input := &ConnectInput{
+		BastionName: "my-bastion",
+		Region:      "ap-southeast-2",
+	}
+
+	_ = cmd.Run(context.Background(), input)
+	// _ = runConnect(context.Background(), svc, &connect.PrepareInput{BastionName: "my-bastion", Region: "ap-southeast-2"}, nil)
 
 	if capturedInput == nil {
 		t.Fatal("Prepare was not called")
@@ -97,11 +116,15 @@ func Test_runConnect_Proxy_PassesExtraSSHArgs(t *testing.T) {
 		},
 	}
 
-	_ = runConnect(testCmd(), svc, &connect.PrepareInput{
+	cmd := NewConnectCommand(svc, bytes.NewBufferString(""), &bytes.Buffer{}, &bytes.Buffer{})
+
+	input := &ConnectInput{
 		BastionName:  "my-bastion",
 		Region:       "ap-southeast-2",
 		ExtraSSHArgs: extraArgs,
-	}, nil)
+	}
+
+	_ = cmd.Run(context.Background(), input)
 
 	if capturedInput == nil {
 		t.Fatal("Prepare was not called")
@@ -123,9 +146,21 @@ func Test_runConnect_OnReady_NotCalledOnPrepareError(t *testing.T) {
 		},
 	}
 
-	_ = runConnect(testCmd(), svc, &connect.PrepareInput{BastionName: "my-bastion", Region: "ap-southeast-2"}, func() {
-		onReadyCalled = true
-	})
+	cmd := NewConnectCommand(svc, bytes.NewBufferString(""), &bytes.Buffer{}, &bytes.Buffer{})
+
+	input := &ConnectInput{
+		BastionName: "my-bastion",
+		Region:      "ap-southeast-2",
+		OnReady: func() {
+			onReadyCalled = true
+		},
+	}
+
+	_ = cmd.Run(context.Background(), input)
+
+	// _ = runConnect(context.Background(), svc, &connect.PrepareInput{BastionName: "my-bastion", Region: "ap-southeast-2"}, func() {
+	// 	onReadyCalled = true
+	// })
 
 	if onReadyCalled {
 		t.Error("onReady should not be called when Prepare fails")

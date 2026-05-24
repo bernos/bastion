@@ -1,4 +1,4 @@
-package main
+package commands
 
 import (
 	"bytes"
@@ -7,7 +7,6 @@ import (
 	"testing"
 
 	"github.com/bernos/bastion/internal/bastion"
-	"github.com/spf13/cobra"
 )
 
 type mockBastionService struct {
@@ -52,11 +51,11 @@ func Test_runDown_Success(t *testing.T) {
 		},
 	}
 
-	var buf bytes.Buffer
-	cmd := &cobra.Command{}
-	cmd.SetOut(&buf)
+	cmd := NewDownCommand(svc, bytes.NewBufferString(""), &bytes.Buffer{}, &bytes.Buffer{})
 
-	if err := runDown(cmd, "my-bastion", svc); err != nil {
+	if err := cmd.Run(context.Background(), &DownInput{
+		BastionName: "my-bastion",
+	}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -64,8 +63,6 @@ func Test_runDown_Success(t *testing.T) {
 		t.Errorf("BastionName: want %q, got %q", "my-bastion", capturedInput.BastionName)
 	}
 
-	// runDown writes to os.Stdout directly; buf may be empty here.
-	// The error-free path is exercised by the call above.
 }
 
 func Test_runDown_ServiceError_Propagated(t *testing.T) {
@@ -77,9 +74,12 @@ func Test_runDown_ServiceError_Propagated(t *testing.T) {
 		},
 	}
 
-	cmd := &cobra.Command{}
+	cmd := NewDownCommand(svc, bytes.NewBufferString(""), &bytes.Buffer{}, &bytes.Buffer{})
 
-	err := runDown(cmd, "missing", svc)
+	err := cmd.Run(context.Background(), &DownInput{
+		BastionName: "missing",
+	})
+
 	if !errors.Is(err, deleteErr) {
 		t.Errorf("expected deleteErr to be wrapped in returned error, got: %v", err)
 	}

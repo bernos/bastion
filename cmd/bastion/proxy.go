@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/bernos/bastion/internal/commands"
 	"github.com/bernos/bastion/internal/config"
-	"github.com/bernos/bastion/internal/connect"
 	"github.com/bernos/bastion/internal/dependencies"
 	"github.com/spf13/cobra"
 )
@@ -26,13 +26,15 @@ func NewProxyCommand(cfg *config.Config) (*cobra.Command, error) {
 				return err
 			}
 
-			return runConnect(cmd, connectSvc, &connect.PrepareInput{
+			c := commands.NewConnectCommand(connectSvc, os.Stdin, os.Stdout, os.Stderr)
+
+			return c.Run(ctx, &commands.ConnectInput{
 				BastionName:  cfg.Name,
 				Region:       cfg.Region,
 				ExtraSSHArgs: []string{"-D", fmt.Sprintf("%d", port), "-N"},
-				// OSUser intentionally unset (defaults to "ec2-user"); see issue #9
-			}, func() {
-				fmt.Fprintf(os.Stderr, "SOCKS5 proxy on localhost:%d via bastion %q — Ctrl-C to stop\n", port, cfg.Name)
+				OnReady: func() {
+					fmt.Fprintf(os.Stderr, "SOCKS5 proxy on localhost:%d via bastion %q — Ctrl-C to stop\n", port, cfg.Name)
+				},
 			})
 		},
 	}

@@ -1,10 +1,9 @@
 package main
 
 import (
-	"encoding/json"
 	"os"
 
-	"github.com/bernos/bastion/internal/bastion"
+	"github.com/bernos/bastion/internal/commands"
 	"github.com/bernos/bastion/internal/config"
 	"github.com/bernos/bastion/internal/dependencies"
 	"github.com/spf13/cobra"
@@ -25,24 +24,13 @@ func NewUpCommand(cfg *config.Config) (*cobra.Command, error) {
 				return err
 			}
 
-			out, err := svc.DeployBastion(ctx, &bastion.DeployBastionInput{
+			c := commands.NewUpCommand(svc, os.Stdin, os.Stdout, os.Stderr)
+
+			return c.Run(ctx, &commands.UpInput{
 				BastionName: cfg.Name,
 				Owner:       cfg.Owner,
 				SubnetID:    cfg.SubnetID,
 				VPCID:       cfg.VPCID,
-			})
-			if err != nil {
-				return err
-			}
-
-			return json.NewEncoder(os.Stdout).Encode(struct {
-				StackName        string `json:"stackName"`
-				InstanceID       string `json:"instanceId"`
-				AvailabilityZone string `json:"availabilityZone"`
-			}{
-				StackName:        out.StackName,
-				InstanceID:       out.InstanceID,
-				AvailabilityZone: out.AvailabilityZone,
 			})
 		},
 	}
