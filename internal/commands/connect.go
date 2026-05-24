@@ -29,7 +29,7 @@ type connectCommand struct {
 	stderr         io.Writer
 }
 
-func NewConnectCommand(svc connect.ConnectService, stdin io.Reader, stdout io.Writer, stderr io.Writer) *connectCommand {
+func NewConnectCommand(svc connect.ConnectService, stdin io.Reader, stdout io.Writer, stderr io.Writer) Command[*ConnectInput] {
 	return &connectCommand{
 		connectService: svc,
 		stdin:          stdin,

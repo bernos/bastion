@@ -20,7 +20,7 @@ type downCommand struct {
 	stderr         io.Writer
 }
 
-func NewDownCommand(svc bastion.BastionService, stdin io.Reader, stdout io.Writer, stderr io.Writer) *downCommand {
+func NewDownCommand(svc bastion.BastionService, stdin io.Reader, stdout io.Writer, stderr io.Writer) Command[*DownInput] {
 	return &downCommand{
 		bastionService: svc,
 		stdin:          stdin,

@@ -22,7 +22,7 @@ type upCommand struct {
 	stderr         io.Writer
 }
 
-func NewUpCommand(svc bastion.BastionService, stdin io.Reader, stdout io.Writer, stderr io.Writer) *upCommand {
+func NewUpCommand(svc bastion.BastionService, stdin io.Reader, stdout io.Writer, stderr io.Writer) Command[*UpInput] {
 	return &upCommand{
 		bastionService: svc,
 		stdin:          stdin,
