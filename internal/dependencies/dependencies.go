@@ -11,6 +11,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/sts"
 	"github.com/bernos/bastion/internal/bastion"
 	"github.com/bernos/bastion/internal/config"
+	"github.com/bernos/bastion/internal/connect"
 	"github.com/bernos/bastion/pkg/aws/cloudformationservice"
 )
 
@@ -21,6 +22,7 @@ type Dependencies struct {
 	ec2icClient          *ec2ic.Client
 	stsClient            *sts.Client
 	bastionService       bastion.BastionService
+	connectService       connect.ConnectService
 }
 
 func New(cfg *config.Config) *Dependencies {
@@ -105,4 +107,23 @@ func (d *Dependencies) STSClient(ctx context.Context) (*sts.Client, error) {
 	d.stsClient = sts.NewFromConfig(c)
 
 	return d.stsClient, nil
+}
+
+func (d *Dependencies) ConnectService(ctx context.Context) (connect.ConnectService, error) {
+	if d.connectService != nil {
+		return d.connectService, nil
+	}
+
+	bastionSvc, err := d.BastionService(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	ec2icClient, err := d.EC2InstanceConnectClient(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	d.connectService = connect.NewConnectService(bastionSvc, ec2icClient)
+	return d.connectService, nil
 }

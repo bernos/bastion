@@ -5,6 +5,7 @@ import (
 	"os"
 
 	"github.com/bernos/bastion/internal/config"
+	"github.com/bernos/bastion/internal/connect"
 	"github.com/bernos/bastion/internal/dependencies"
 	"github.com/spf13/cobra"
 )
@@ -19,25 +20,20 @@ func NewProxyCommand(cfg *config.Config) (*cobra.Command, error) {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()
 
-			if err := checkSSMDependencies(); err != nil {
-				return err
-			}
-
 			deps := dependencies.New(cfg)
-			svc, err := deps.BastionService(ctx)
-			if err != nil {
-				return err
-			}
-			ec2icClient, err := deps.EC2InstanceConnectClient(ctx)
+			connectSvc, err := deps.ConnectService(ctx)
 			if err != nil {
 				return err
 			}
 
-			extraArgs := []string{"-D", fmt.Sprintf("%d", port), "-N"}
-			onReady := func() {
+			return runConnect(cmd, connectSvc, &connect.PrepareInput{
+				BastionName:  cfg.Name,
+				Region:       cfg.Region,
+				ExtraSSHArgs: []string{"-D", fmt.Sprintf("%d", port), "-N"},
+				// OSUser intentionally unset (defaults to "ec2-user"); see issue #9
+			}, func() {
 				fmt.Fprintf(os.Stderr, "SOCKS5 proxy on localhost:%d via bastion %q — Ctrl-C to stop\n", port, cfg.Name)
-			}
-			return runConnect(cmd, cfg.Name, cfg.Region, svc, ec2icClient, extraArgs, onReady)
+			})
 		},
 	}
 
