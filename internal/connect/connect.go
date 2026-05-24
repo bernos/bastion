@@ -23,11 +23,9 @@ type PrepareInput struct {
 	PrivateKeyFile PrivateKeyWriter // caller-created file that receives the private key
 }
 
-// Connection holds exec-ready SSH arguments and the path to the ephemeral private key.
-// The caller is responsible for removing KeyPath after the SSH process exits.
+// Connection holds exec-ready SSH arguments returned by Prepare.
 type Connection struct {
 	SSHArgs []string
-	KeyPath string
 }
 
 // ConnectService prepares bastion connections for use by the ssh and proxy commands.

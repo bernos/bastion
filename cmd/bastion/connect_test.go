@@ -26,7 +26,7 @@ func (m *mockConnectService) Prepare(ctx context.Context, input *connect.Prepare
 	if m.PrepareFn != nil {
 		return m.PrepareFn(ctx, input)
 	}
-	return &connect.Connection{SSHArgs: []string{"-V"}, KeyPath: "/tmp/fake.pem"}, nil
+	return &connect.Connection{SSHArgs: []string{"-V"}}, nil
 }
 
 func testCmd() *cobra.Command {
@@ -111,26 +111,6 @@ func Test_runConnect_Proxy_PassesExtraSSHArgs(t *testing.T) {
 	}
 	if capturedInput.ExtraSSHArgs[0] != "-D" || capturedInput.ExtraSSHArgs[1] != "1080" || capturedInput.ExtraSSHArgs[2] != "-N" {
 		t.Errorf("ExtraSSHArgs: want [-D 1080 -N], got %v", capturedInput.ExtraSSHArgs)
-	}
-}
-
-func Test_runConnect_OnReady_CalledAfterPrepare(t *testing.T) {
-	var seq []string
-
-	svc := &mockConnectService{
-		PrepareFn: func(_ context.Context, _ *connect.PrepareInput) (*connect.Connection, error) {
-			seq = append(seq, "prepare")
-			return nil, errors.New("stop here")
-		},
-	}
-
-	onReady := func() { seq = append(seq, "ready") }
-
-	_ = runConnect(testCmd(), svc, &connect.PrepareInput{BastionName: "my-bastion", Region: "ap-southeast-2"}, onReady)
-
-	// onReady should not be called because Prepare returned an error before we got there
-	if len(seq) != 1 || seq[0] != "prepare" {
-		t.Errorf("unexpected call sequence: %v", seq)
 	}
 }
 

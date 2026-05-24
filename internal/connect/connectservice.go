@@ -85,7 +85,7 @@ func (s *connectService) Prepare(ctx context.Context, input *PrepareInput) (*Con
 	}
 
 	sshArgs := buildSSHArgs(described.InstanceID, input.Region, keyPath, osUser, input.ExtraSSHArgs)
-	return &Connection{SSHArgs: sshArgs, KeyPath: keyPath}, nil
+	return &Connection{SSHArgs: sshArgs}, nil
 }
 
 func generateEphemeralKeyPair() (privateKeyPEM []byte, publicKeyAuthorized string, err error) {

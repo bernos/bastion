@@ -31,6 +31,7 @@ func NewSSHCommand(cfg *config.Config) (*cobra.Command, error) {
 			return runConnect(cmd, connectSvc, &connect.PrepareInput{
 				BastionName: cfg.Name,
 				Region:      cfg.Region,
+				// OSUser intentionally unset (defaults to "ec2-user"); see issue #9
 			}, nil)
 		},
 	}

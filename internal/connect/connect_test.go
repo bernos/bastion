@@ -93,8 +93,9 @@ func (m *mockPrivateKeyWriter) Close() error {
 func (m *mockPrivateKeyWriter) Name() string { return m.name }
 
 // noopKeyFile returns a PrivateKeyWriter stub for tests that stop before the key-write step.
-func noopKeyFile() *mockPrivateKeyWriter {
-	return &mockPrivateKeyWriter{name: "/tmp/noopkey.pem"}
+func noopKeyFile(t *testing.T) *mockPrivateKeyWriter {
+	t.Helper()
+	return &mockPrivateKeyWriter{name: filepath.Join(t.TempDir(), "key.pem")}
 }
 
 // stubPath creates a temporary directory with stub executables and returns the directory path.
@@ -167,7 +168,7 @@ func Test_Prepare_DescribeBastionError_Propagated(t *testing.T) {
 	conn, err := svc.Prepare(context.Background(), &PrepareInput{
 		BastionName:    "my-bastion",
 		Region:         "ap-southeast-2",
-		PrivateKeyFile: noopKeyFile(),
+		PrivateKeyFile: noopKeyFile(t),
 	})
 	if conn != nil {
 		t.Error("expected nil Connection")
@@ -192,7 +193,7 @@ func Test_Prepare_WaitForSSMReadyError_Propagated(t *testing.T) {
 	conn, err := svc.Prepare(context.Background(), &PrepareInput{
 		BastionName:    "my-bastion",
 		Region:         "ap-southeast-2",
-		PrivateKeyFile: noopKeyFile(),
+		PrivateKeyFile: noopKeyFile(t),
 	})
 	if conn != nil {
 		t.Error("expected nil Connection")
@@ -218,7 +219,7 @@ func Test_Prepare_KeyUploadError_Propagated(t *testing.T) {
 	conn, err := svc.Prepare(context.Background(), &PrepareInput{
 		BastionName:    "my-bastion",
 		Region:         "ap-southeast-2",
-		PrivateKeyFile: noopKeyFile(),
+		PrivateKeyFile: noopKeyFile(t),
 	})
 	if conn != nil {
 		t.Error("expected nil Connection")
@@ -246,7 +247,7 @@ func Test_Prepare_OSUser_DefaultsToEC2User(t *testing.T) {
 		BastionName:    "my-bastion",
 		Region:         "ap-southeast-2",
 		OSUser:         "", // empty → should default to "ec2-user"
-		PrivateKeyFile: noopKeyFile(),
+		PrivateKeyFile: noopKeyFile(t),
 	})
 
 	if capturedInput == nil {
@@ -275,7 +276,7 @@ func Test_Prepare_OSUser_ExplicitValue(t *testing.T) {
 		BastionName:    "my-bastion",
 		Region:         "ap-southeast-2",
 		OSUser:         "ubuntu",
-		PrivateKeyFile: noopKeyFile(),
+		PrivateKeyFile: noopKeyFile(t),
 	})
 
 	if capturedInput == nil {
@@ -314,9 +315,6 @@ func Test_Prepare_Success_ReturnsConnectionWithSSHArgs(t *testing.T) {
 	}
 	if len(conn.SSHArgs) == 0 {
 		t.Error("SSHArgs must be non-empty")
-	}
-	if conn.KeyPath != keyPath {
-		t.Errorf("KeyPath: want %q, got %q", keyPath, conn.KeyPath)
 	}
 }
 

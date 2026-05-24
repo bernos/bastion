@@ -30,6 +30,7 @@ func NewProxyCommand(cfg *config.Config) (*cobra.Command, error) {
 				BastionName:  cfg.Name,
 				Region:       cfg.Region,
 				ExtraSSHArgs: []string{"-D", fmt.Sprintf("%d", port), "-N"},
+				// OSUser intentionally unset (defaults to "ec2-user"); see issue #9
 			}, func() {
 				fmt.Fprintf(os.Stderr, "SOCKS5 proxy on localhost:%d via bastion %q — Ctrl-C to stop\n", port, cfg.Name)
 			})
