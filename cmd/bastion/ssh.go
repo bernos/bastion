@@ -56,11 +56,18 @@ func runConnect(cmd *cobra.Command, connectSvc connect.ConnectService, input *co
 		return err
 	}
 
+	keyFile, err := os.CreateTemp("", "bastion-key-*.pem")
+	if err != nil {
+		return fmt.Errorf("creating temp key file: %w", err)
+	}
+	defer func() { _ = os.Remove(keyFile.Name()) }()
+
+	input.PrivateKeyFile = keyFile
+
 	conn, err := connectSvc.Prepare(ctx, input)
 	if err != nil {
 		return err
 	}
-	defer func() { _ = os.Remove(conn.KeyPath) }()
 
 	sshCmd := exec.Command("ssh", conn.SSHArgs...)
 	sshCmd.Stdin = os.Stdin

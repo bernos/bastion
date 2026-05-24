@@ -3,6 +3,7 @@ package connect
 import (
 	"context"
 	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -58,6 +59,42 @@ func (m *mockEC2ICSender) SendSSHPublicKey(ctx context.Context, params *ec2ic.Se
 		return m.SendSSHPublicKeyFn(ctx, params, optFns...)
 	}
 	return &ec2ic.SendSSHPublicKeyOutput{}, nil
+}
+
+// mockPrivateKeyWriter satisfies PrivateKeyWriter for tests.
+type mockPrivateKeyWriter struct {
+	name    string
+	ChmodFn func(fs.FileMode) error
+	WriteFn func([]byte) (int, error)
+	CloseFn func() error
+}
+
+func (m *mockPrivateKeyWriter) Chmod(mode fs.FileMode) error {
+	if m.ChmodFn != nil {
+		return m.ChmodFn(mode)
+	}
+	return nil
+}
+
+func (m *mockPrivateKeyWriter) Write(p []byte) (int, error) {
+	if m.WriteFn != nil {
+		return m.WriteFn(p)
+	}
+	return len(p), nil
+}
+
+func (m *mockPrivateKeyWriter) Close() error {
+	if m.CloseFn != nil {
+		return m.CloseFn()
+	}
+	return nil
+}
+
+func (m *mockPrivateKeyWriter) Name() string { return m.name }
+
+// noopKeyFile returns a PrivateKeyWriter stub for tests that stop before the key-write step.
+func noopKeyFile() *mockPrivateKeyWriter {
+	return &mockPrivateKeyWriter{name: "/tmp/noopkey.pem"}
 }
 
 // stubPath creates a temporary directory with stub executables and returns the directory path.
@@ -127,7 +164,11 @@ func Test_Prepare_DescribeBastionError_Propagated(t *testing.T) {
 		},
 	}, &mockEC2ICSender{})
 
-	conn, err := svc.Prepare(context.Background(), &PrepareInput{BastionName: "my-bastion", Region: "ap-southeast-2"})
+	conn, err := svc.Prepare(context.Background(), &PrepareInput{
+		BastionName:    "my-bastion",
+		Region:         "ap-southeast-2",
+		PrivateKeyFile: noopKeyFile(),
+	})
 	if conn != nil {
 		t.Error("expected nil Connection")
 	}
@@ -148,7 +189,11 @@ func Test_Prepare_WaitForSSMReadyError_Propagated(t *testing.T) {
 		},
 	}, &mockEC2ICSender{})
 
-	conn, err := svc.Prepare(context.Background(), &PrepareInput{BastionName: "my-bastion", Region: "ap-southeast-2"})
+	conn, err := svc.Prepare(context.Background(), &PrepareInput{
+		BastionName:    "my-bastion",
+		Region:         "ap-southeast-2",
+		PrivateKeyFile: noopKeyFile(),
+	})
 	if conn != nil {
 		t.Error("expected nil Connection")
 	}
@@ -170,7 +215,11 @@ func Test_Prepare_KeyUploadError_Propagated(t *testing.T) {
 		},
 	})
 
-	conn, err := svc.Prepare(context.Background(), &PrepareInput{BastionName: "my-bastion", Region: "ap-southeast-2"})
+	conn, err := svc.Prepare(context.Background(), &PrepareInput{
+		BastionName:    "my-bastion",
+		Region:         "ap-southeast-2",
+		PrivateKeyFile: noopKeyFile(),
+	})
 	if conn != nil {
 		t.Error("expected nil Connection")
 	}
@@ -200,9 +249,10 @@ func Test_Prepare_OnReady_CalledAfterSSMReady(t *testing.T) {
 	onReady := func() { seq = append(seq, "ready") }
 
 	_, _ = svc.Prepare(context.Background(), &PrepareInput{
-		BastionName: "my-bastion",
-		Region:      "ap-southeast-2",
-		OnReady:     onReady,
+		BastionName:    "my-bastion",
+		Region:         "ap-southeast-2",
+		OnReady:        onReady,
+		PrivateKeyFile: noopKeyFile(),
 	})
 
 	want := []string{"ssm", "ready", "upload"}
@@ -224,9 +274,10 @@ func Test_Prepare_OnReady_NotCalledOnSSMError(t *testing.T) {
 	}, &mockEC2ICSender{})
 
 	_, _ = svc.Prepare(context.Background(), &PrepareInput{
-		BastionName: "my-bastion",
-		Region:      "ap-southeast-2",
-		OnReady:     func() { onReadyCalled = true },
+		BastionName:    "my-bastion",
+		Region:         "ap-southeast-2",
+		OnReady:        func() { onReadyCalled = true },
+		PrivateKeyFile: noopKeyFile(),
 	})
 
 	if onReadyCalled {
@@ -249,9 +300,10 @@ func Test_Prepare_OSUser_DefaultsToEC2User(t *testing.T) {
 	})
 
 	_, _ = svc.Prepare(context.Background(), &PrepareInput{
-		BastionName: "my-bastion",
-		Region:      "ap-southeast-2",
-		OSUser:      "", // empty → should default to "ec2-user"
+		BastionName:    "my-bastion",
+		Region:         "ap-southeast-2",
+		OSUser:         "", // empty → should default to "ec2-user"
+		PrivateKeyFile: noopKeyFile(),
 	})
 
 	if capturedInput == nil {
@@ -277,9 +329,10 @@ func Test_Prepare_OSUser_ExplicitValue(t *testing.T) {
 	})
 
 	_, _ = svc.Prepare(context.Background(), &PrepareInput{
-		BastionName: "my-bastion",
-		Region:      "ap-southeast-2",
-		OSUser:      "ubuntu",
+		BastionName:    "my-bastion",
+		Region:         "ap-southeast-2",
+		OSUser:         "ubuntu",
+		PrivateKeyFile: noopKeyFile(),
 	})
 
 	if capturedInput == nil {
@@ -291,6 +344,13 @@ func Test_Prepare_OSUser_ExplicitValue(t *testing.T) {
 }
 
 func Test_Prepare_Success_ReturnsConnectionWithSSHArgs(t *testing.T) {
+	keyFile, err := os.CreateTemp("", "bastion-key-test-*.pem")
+	if err != nil {
+		t.Fatalf("creating temp key file: %v", err)
+	}
+	keyPath := keyFile.Name()
+	defer func() { _ = os.Remove(keyPath) }()
+
 	svc := NewConnectService(&mockBastionService{
 		DescribeBastionFn: func(_ context.Context, _ *bastion.DescribeBastionInput) (*bastion.DescribeBastionOutput, error) {
 			return &bastion.DescribeBastionOutput{InstanceID: "i-abc001", AvailabilityZone: "ap-southeast-2a"}, nil
@@ -298,8 +358,9 @@ func Test_Prepare_Success_ReturnsConnectionWithSSHArgs(t *testing.T) {
 	}, &mockEC2ICSender{})
 
 	conn, err := svc.Prepare(context.Background(), &PrepareInput{
-		BastionName: "my-bastion",
-		Region:      "ap-southeast-2",
+		BastionName:    "my-bastion",
+		Region:         "ap-southeast-2",
+		PrivateKeyFile: keyFile,
 	})
 
 	if err != nil {
@@ -311,15 +372,8 @@ func Test_Prepare_Success_ReturnsConnectionWithSSHArgs(t *testing.T) {
 	if len(conn.SSHArgs) == 0 {
 		t.Error("SSHArgs must be non-empty")
 	}
-	if conn.KeyPath == "" {
-		t.Error("KeyPath must be non-empty")
-	}
-
-	// Clean up the temp key file.
-	defer func() { _ = os.Remove(conn.KeyPath) }()
-
-	if _, err := os.Stat(conn.KeyPath); err != nil {
-		t.Errorf("KeyPath %q must exist: %v", conn.KeyPath, err)
+	if conn.KeyPath != keyPath {
+		t.Errorf("KeyPath: want %q, got %q", keyPath, conn.KeyPath)
 	}
 }
 

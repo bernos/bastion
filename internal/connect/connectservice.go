@@ -6,7 +6,6 @@ import (
 	"crypto/rand"
 	"encoding/pem"
 	"fmt"
-	"os"
 	"os/exec"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -75,24 +74,17 @@ func (s *connectService) Prepare(ctx context.Context, input *PrepareInput) (*Con
 		return nil, fmt.Errorf("uploading SSH public key: %w", err)
 	}
 
-	keyFile, err := os.CreateTemp("", "bastion-key-*.pem")
-	if err != nil {
-		return nil, fmt.Errorf("creating temp key file: %w", err)
-	}
-	keyPath := keyFile.Name()
+	keyPath := input.PrivateKeyFile.Name()
 
-	if err := keyFile.Chmod(0o600); err != nil {
-		_ = keyFile.Close()
-		_ = os.Remove(keyPath)
+	if err := input.PrivateKeyFile.Chmod(0o600); err != nil {
+		_ = input.PrivateKeyFile.Close()
 		return nil, fmt.Errorf("setting key file permissions: %w", err)
 	}
-	if _, err := keyFile.Write(privateKeyPEM); err != nil {
-		_ = keyFile.Close()
-		_ = os.Remove(keyPath)
+	if _, err := input.PrivateKeyFile.Write(privateKeyPEM); err != nil {
+		_ = input.PrivateKeyFile.Close()
 		return nil, fmt.Errorf("writing key file: %w", err)
 	}
-	if err := keyFile.Close(); err != nil {
-		_ = os.Remove(keyPath)
+	if err := input.PrivateKeyFile.Close(); err != nil {
 		return nil, fmt.Errorf("closing key file: %w", err)
 	}
 
