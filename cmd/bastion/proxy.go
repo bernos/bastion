@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 
-	ec2ic "github.com/aws/aws-sdk-go-v2/service/ec2instanceconnect"
 	"github.com/bernos/bastion/internal/config"
 	"github.com/bernos/bastion/internal/dependencies"
 	"github.com/spf13/cobra"
@@ -29,7 +28,7 @@ func NewProxyCommand(cfg *config.Config) (*cobra.Command, error) {
 			if err != nil {
 				return err
 			}
-			awsCfg, err := deps.AwsConfig(ctx)
+			ec2icClient, err := deps.EC2InstanceConnectClient(ctx)
 			if err != nil {
 				return err
 			}
@@ -38,7 +37,7 @@ func NewProxyCommand(cfg *config.Config) (*cobra.Command, error) {
 			onReady := func() {
 				fmt.Fprintf(os.Stderr, "SOCKS5 proxy on localhost:%d via bastion %q — Ctrl-C to stop\n", port, cfg.Name)
 			}
-			return runConnect(cmd, cfg.Name, cfg.Region, svc, ec2ic.NewFromConfig(awsCfg), extraArgs, onReady)
+			return runConnect(cmd, cfg.Name, cfg.Region, svc, ec2icClient, extraArgs, onReady)
 		},
 	}
 

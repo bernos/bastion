@@ -18,6 +18,7 @@ type Dependencies struct {
 	cfg                  *config.Config
 	awsConfig            *aws.Config
 	cloudFormationClient *cloudformation.Client
+	ec2icClient          *ec2ic.Client
 	stsClient            *sts.Client
 	bastionService       bastion.BastionService
 }
@@ -54,6 +55,21 @@ func (d *Dependencies) CloudFormationClient(ctx context.Context) (*cloudformatio
 	d.cloudFormationClient = cloudformation.NewFromConfig(c)
 
 	return d.cloudFormationClient, nil
+}
+
+func (d *Dependencies) EC2InstanceConnectClient(ctx context.Context) (*ec2ic.Client, error) {
+	if d.ec2icClient != nil {
+		return d.ec2icClient, nil
+	}
+
+	c, err := d.AwsConfig(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	d.ec2icClient = ec2ic.NewFromConfig(c)
+
+	return d.ec2icClient, nil
 }
 
 func (d *Dependencies) BastionService(ctx context.Context) (bastion.BastionService, error) {

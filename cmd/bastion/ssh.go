@@ -34,12 +34,12 @@ func NewSSHCommand(cfg *config.Config) (*cobra.Command, error) {
 			if err != nil {
 				return err
 			}
-			awsCfg, err := deps.AwsConfig(ctx)
+			ec2icClient, err := deps.EC2InstanceConnectClient(ctx)
 			if err != nil {
 				return err
 			}
 
-			return runConnect(cmd, cfg.Name, cfg.Region, svc, ec2ic.NewFromConfig(awsCfg), nil, nil)
+			return runConnect(cmd, cfg.Name, cfg.Region, svc, ec2icClient, nil, nil)
 		},
 	}
 
