@@ -10,7 +10,7 @@ import (
 
 const (
 	EnvVarPrefix                      = "BASTION"
-	DefaultAMIParameterStoreParamName = "/aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-x86_64-gp2"
+	DefaultAMIParameterStoreParamName = "/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-arm64"
 )
 
 type Config struct {
