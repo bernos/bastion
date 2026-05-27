@@ -182,11 +182,11 @@ func Test_BastionService_DeployBastion_DefaultsInstanceTypeAndAMI(t *testing.T) 
 		t.Errorf("AvailabilityZone: want empty string, got %q", out.AvailabilityZone)
 	}
 
-	if got := paramValue(captured.Parameters, "InstanceType"); got != "t3.micro" {
-		t.Errorf("default InstanceType: want %q, got %q", "t3.micro", got)
+	if got := paramValue(captured.Parameters, "InstanceType"); got != "t4g.micro" {
+		t.Errorf("default InstanceType: want %q, got %q", "t4g.micro", got)
 	}
 
-	wantAMI := "/aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-x86_64-gp2"
+	wantAMI := "/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-arm64"
 	if got := paramValue(captured.Parameters, "AmiId"); got != wantAMI {
 		t.Errorf("default AmiId: want %q, got %q", wantAMI, got)
 	}
