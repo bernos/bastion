@@ -9,15 +9,17 @@ import (
 )
 
 const (
-	EnvVarPrefix = "BASTION"
+	EnvVarPrefix                      = "BASTION"
+	DefaultAMIParameterStoreParamName = "/aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-x86_64-gp2"
 )
 
 type Config struct {
-	Name     string `mapstructure:"name"`
-	Owner    string `mapstructure:"owner"`
-	SubnetID string `mapstructure:"subnet-id"`
-	VPCID    string `mapstructure:"vpc-id"`
-	Region   string `mapstructure:"region"`
+	Name                       string `mapstructure:"name"`
+	Owner                      string `mapstructure:"owner"`
+	SubnetID                   string `mapstructure:"subnet-id"`
+	VPCID                      string `mapstructure:"vpc-id"`
+	Region                     string `mapstructure:"region"`
+	AMIParameterStoreParamName string `mapstructure:"ami-parameter-store-param-name"`
 }
 
 func Initialize(cfg *Config, v *viper.Viper, cmd *cobra.Command) error {
@@ -36,5 +38,13 @@ func Initialize(cfg *Config, v *viper.Viper, cmd *cobra.Command) error {
 		return err
 	}
 
-	return v.Unmarshal(cfg)
+	if err := v.Unmarshal(cfg); err != nil {
+		return err
+	}
+
+	if cfg.AMIParameterStoreParamName == "" {
+		cfg.AMIParameterStoreParamName = DefaultAMIParameterStoreParamName
+	}
+
+	return nil
 }

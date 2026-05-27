@@ -18,6 +18,7 @@ func newTestCmd() *cobra.Command {
 	cmd.Flags().String("subnet-id", "", "")
 	cmd.Flags().String("vpc-id", "", "")
 	cmd.Flags().String("region", "", "")
+	cmd.Flags().String("ami-parameter-store-param-name", "", "")
 	return cmd
 }
 
@@ -37,6 +38,7 @@ name: file-name
 owner: owner-from-file
 subnet-id: subnet-from-file
 vpc-id: vpc-from-file
+ami-parameter-store-param-name: param-name-from-file
 `)
 	v := viper.New()
 	v.SetConfigFile(cfgFile)
@@ -58,6 +60,9 @@ vpc-id: vpc-from-file
 	if cfg.VPCID != "vpc-from-file" {
 		t.Errorf("VPCID: want %q, got %q", "vpc-from-file", cfg.VPCID)
 	}
+	if cfg.AMIParameterStoreParamName != "param-name-from-file" {
+		t.Errorf("ParameterStoreParamName: want %q, got %q", "param-name-from-file", cfg.AMIParameterStoreParamName)
+	}
 }
 
 func TestInitialize_FromEnvVars(t *testing.T) {
@@ -65,6 +70,7 @@ func TestInitialize_FromEnvVars(t *testing.T) {
 	t.Setenv("BASTION_OWNER", "owner-from-env")
 	t.Setenv("BASTION_SUBNET_ID", "subnet-from-env")
 	t.Setenv("BASTION_VPC_ID", "vpc-from-env")
+	t.Setenv("BASTION_AMI_PARAMETER_STORE_PARAM_NAME", "param-name-from-env")
 
 	cfg := &config.Config{}
 	if err := config.Initialize(cfg, viper.New(), newTestCmd()); err != nil {
@@ -83,6 +89,9 @@ func TestInitialize_FromEnvVars(t *testing.T) {
 	if cfg.VPCID != "vpc-from-env" {
 		t.Errorf("VPCID: want %q, got %q", "vpc-from-env", cfg.VPCID)
 	}
+	if cfg.AMIParameterStoreParamName != "param-name-from-env" {
+		t.Errorf("ParameterStoreParamName: want %q, got %q", "param-name-from-env", cfg.AMIParameterStoreParamName)
+	}
 }
 
 func TestInitialize_FromFlags(t *testing.T) {
@@ -97,6 +106,9 @@ func TestInitialize_FromFlags(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := cmd.Flags().Set("vpc-id", "vpc-from-flag"); err != nil {
+		t.Fatal(err)
+	}
+	if err := cmd.Flags().Set("ami-parameter-store-param-name", "param-name-from-flag"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -116,6 +128,9 @@ func TestInitialize_FromFlags(t *testing.T) {
 	}
 	if cfg.VPCID != "vpc-from-flag" {
 		t.Errorf("VPCID: want %q, got %q", "vpc-from-flag", cfg.VPCID)
+	}
+	if cfg.AMIParameterStoreParamName != "param-name-from-flag" {
+		t.Errorf("ParameterStoreParamName: want %q, got %q", "param-name-from-flag", cfg.AMIParameterStoreParamName)
 	}
 }
 
@@ -290,6 +305,17 @@ func TestInitialize_Region_OmittedIsEmpty(t *testing.T) {
 
 	if cfg.Region != "" {
 		t.Errorf("Region: want empty string, got %q", cfg.Region)
+	}
+}
+
+func TestInitialize_AMIParam_Default(t *testing.T) {
+	cfg := &config.Config{}
+	if err := config.Initialize(cfg, viper.New(), newTestCmd()); err != nil {
+		t.Fatal(err)
+	}
+
+	if cfg.AMIParameterStoreParamName != config.DefaultAMIParameterStoreParamName {
+		t.Errorf("AMIParameterStoreParamName: want %q, got %q", config.DefaultAMIParameterStoreParamName, cfg.AMIParameterStoreParamName)
 	}
 }
 
