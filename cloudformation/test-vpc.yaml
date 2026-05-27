@@ -14,6 +14,10 @@ Parameters:
     Type: String
     Default: 10.0.2.0/24
 
+  WebServerAmiId:
+    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+    Default: /aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-arm64
+
 Resources:
   VPC:
     Type: AWS::EC2::VPC
@@ -122,6 +126,88 @@ Resources:
         - !Ref EndpointSecurityGroup
       PrivateDnsEnabled: true
 
+  # Private web server — static HTTP target for demonstrating bastion access patterns
+  WebServerSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Web server - allow HTTP from VPC
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: !Ref VpcCidr
+      Tags:
+        - Key: Name
+          Value: bastion-test-webserver
+
+  WebServerInstance:
+    Type: AWS::EC2::Instance
+    Properties:
+      InstanceType: t4g.micro
+      ImageId: !Ref WebServerAmiId
+      SubnetId: !Ref PrivateSubnet1
+      SecurityGroupIds:
+        - !Ref WebServerSecurityGroup
+      UserData:
+        Fn::Base64: |
+          #!/bin/bash
+          mkdir -p /var/www
+          cat > /var/www/index.html << 'HTMLEOF'
+          <!DOCTYPE html>
+          <html>
+          <head><title>Private Web Server</title></head>
+          <body>
+            <h1>Private Web Server</h1>
+            <p>This server is only accessible from within the VPC via the bastion host.</p>
+            <p>Private DNS: <code>webserver.bastion-test.internal</code></p>
+            <p>Access methods:</p>
+            <ul>
+              <li>SSM port forwarding via <code>aws ssm start-session</code></li>
+              <li>SSH local port forwarding via the bastion</li>
+            </ul>
+          </body>
+          </html>
+          HTMLEOF
+          cat > /etc/systemd/system/static-web.service << 'SVCEOF'
+          [Unit]
+          Description=Static web server
+          After=network.target
+
+          [Service]
+          Type=simple
+          WorkingDirectory=/var/www
+          ExecStart=/usr/bin/python3 -m http.server 80
+          Restart=always
+
+          [Install]
+          WantedBy=multi-user.target
+          SVCEOF
+          systemctl daemon-reload
+          systemctl enable static-web
+          systemctl start static-web
+      Tags:
+        - Key: Name
+          Value: bastion-test-webserver
+
+  WebServerHostedZone:
+    Type: AWS::Route53::HostedZone
+    Properties:
+      Name: bastion-test.internal
+      VPCs:
+        - VPCId: !Ref VPC
+          VPCRegion: !Ref AWS::Region
+
+  WebServerDnsRecord:
+    Type: AWS::Route53::RecordSet
+    Properties:
+      HostedZoneId: !Ref WebServerHostedZone
+      Name: webserver.bastion-test.internal
+      Type: A
+      TTL: 300
+      ResourceRecords:
+        - !GetAtt WebServerInstance.PrivateIp
+
 
 Outputs:
   VpcId:
@@ -139,3 +225,11 @@ Outputs:
   PrivateSubnetIds:
     Value: !Join [',', [!Ref PrivateSubnet1, !Ref PrivateSubnet2]]
     Description: Comma-separated list of both private subnet IDs
+
+  WebServerUrl:
+    Value: http://webserver.bastion-test.internal
+    Description: Private web server URL — only reachable from within the VPC via the bastion
+
+  WebServerPrivateIp:
+    Value: !GetAtt WebServerInstance.PrivateIp
+    Description: Private IP address of the web server EC2 instance
