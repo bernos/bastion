@@ -65,6 +65,7 @@ type DeployBastionInput struct {
 	AMIParameterName string
 	InstanceType     string
 	VPCID            string
+	Tags             map[string]string
 }
 
 type DeployBastionOutput struct {
@@ -122,6 +123,7 @@ func (svc *bastionService) DeployBastion(ctx context.Context, input *DeployBasti
 			{ParameterKey: aws.String("BastionName"), ParameterValue: aws.String(input.BastionName)},
 			{ParameterKey: aws.String("Owner"), ParameterValue: aws.String(input.Owner)},
 		},
+		Tags: stackTagsFromMap(input.Tags),
 	})
 
 	if err != nil {
@@ -207,4 +209,12 @@ func (svc *bastionService) WaitForSSMReady(ctx context.Context, input *WaitForSS
 			}
 		}
 	}
+}
+
+func stackTagsFromMap(m map[string]string) []types.Tag {
+	tags := make([]types.Tag, 0, len(m))
+	for k, v := range m {
+		tags = append(tags, types.Tag{Key: aws.String(k), Value: aws.String(v)})
+	}
+	return tags
 }

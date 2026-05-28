@@ -14,6 +14,7 @@ type UpInput struct {
 	SubnetID         string
 	VPCID            string
 	AMIParameterName string
+	Tags             map[string]string
 }
 
 type upCommand struct {
@@ -40,6 +41,7 @@ func (c *upCommand) Run(ctx context.Context, input *UpInput) error {
 		SubnetID:         input.SubnetID,
 		VPCID:            input.VPCID,
 		AMIParameterName: input.AMIParameterName,
+		Tags:             input.Tags,
 	})
 
 	if err != nil {
