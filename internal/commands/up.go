@@ -9,10 +9,11 @@ import (
 )
 
 type UpInput struct {
-	BastionName string
-	Owner       string
-	SubnetID    string
-	VPCID       string
+	BastionName      string
+	Owner            string
+	SubnetID         string
+	VPCID            string
+	AMIParameterName string
 }
 
 type upCommand struct {
@@ -34,10 +35,11 @@ func NewUpCommand(svc bastion.BastionService, stdin io.Reader, stdout io.Writer,
 func (c *upCommand) Run(ctx context.Context, input *UpInput) error {
 
 	out, err := c.bastionService.DeployBastion(ctx, &bastion.DeployBastionInput{
-		BastionName: input.BastionName,
-		Owner:       input.Owner,
-		SubnetID:    input.SubnetID,
-		VPCID:       input.VPCID,
+		BastionName:      input.BastionName,
+		Owner:            input.Owner,
+		SubnetID:         input.SubnetID,
+		VPCID:            input.VPCID,
+		AMIParameterName: input.AMIParameterName,
 	})
 
 	if err != nil {

@@ -27,10 +27,11 @@ func NewUpCommand(cfg *config.Config) (*cobra.Command, error) {
 			c := commands.NewUpCommand(svc, os.Stdin, os.Stdout, os.Stderr)
 
 			return c.Run(ctx, &commands.UpInput{
-				BastionName: cfg.Name,
-				Owner:       cfg.Owner,
-				SubnetID:    cfg.SubnetID,
-				VPCID:       cfg.VPCID,
+				BastionName:      cfg.Name,
+				Owner:            cfg.Owner,
+				SubnetID:         cfg.SubnetID,
+				VPCID:            cfg.VPCID,
+				AMIParameterName: cfg.AMIParameterStoreParamName,
 			})
 		},
 	}
@@ -40,6 +41,7 @@ func NewUpCommand(cfg *config.Config) (*cobra.Command, error) {
 	cmd.Flags().String("subnet-id", "", "private subnet ID in which to launch the bastion instance")
 	cmd.Flags().String("vpc-id", "", "VPC ID for the bastion security group")
 	cmd.Flags().String("region", "", "AWS region to deploy the bastion into")
+	cmd.Flags().String("ami-parameter-store-param-name", "", "SSM parameter store path for the bastion AMI ID")
 
 	for _, flag := range []string{"name", "owner", "subnet-id", "vpc-id", "region"} {
 		if err := cmd.MarkFlagRequired(flag); err != nil {

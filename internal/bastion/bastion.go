@@ -101,12 +101,12 @@ func (svc *bastionService) DeployBastion(ctx context.Context, input *DeployBasti
 
 	amiParam := input.AMIParameterName
 	if amiParam == "" {
-		amiParam = "/aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-x86_64-gp2"
+		amiParam = "/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-arm64"
 	}
 
 	instanceType := input.InstanceType
 	if instanceType == "" {
-		instanceType = "t3.micro"
+		instanceType = "t4g.micro"
 	}
 
 	out, err := svc.cloudFormationService.Deploy(ctx, &cloudformationservice.DeployInput{
