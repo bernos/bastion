@@ -11,8 +11,8 @@ type TagMap map[string]string
 func (t *TagMap) Type() string { return "tags" }
 
 // String returns tags as "key=value,key2=value2" — the same format accepted by Set.
-// Viper reads this when the flag is bound, so the format must be parseable by the
-// config decode hook.
+// Viper reads this via BindPFlags when the flag is changed, so the format must be
+// parseable by the config decode hook.
 func (t *TagMap) String() string {
 	if len(*t) == 0 {
 		return ""

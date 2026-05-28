@@ -3,6 +3,7 @@ package main
 import (
 	"os"
 
+	"github.com/bernos/bastion/cmd/bastion/flags"
 	"github.com/bernos/bastion/internal/commands"
 	"github.com/bernos/bastion/internal/config"
 	"github.com/bernos/bastion/internal/dependencies"
@@ -44,7 +45,8 @@ func NewUpCommand(cfg *config.Config) (*cobra.Command, error) {
 	cmd.Flags().String("region", "", "AWS region to deploy the bastion into")
 	cmd.Flags().String("ami-parameter-store-param-name", "", "SSM parameter store path for the bastion AMI ID")
 
-	cmd.Flags().String("tags", "", "additional tags to apply to the CloudFormation stack (key1=value1,key2=value2,...); max 50 tags")
+	tagsVar := flags.TagMap{}
+	cmd.Flags().Var(&tagsVar, "tags", "additional tags to apply to the CloudFormation stack (key=value,...); max 50 tags")
 
 	for _, flag := range []string{"name", "owner", "subnet-id", "vpc-id", "region"} {
 		if err := cmd.MarkFlagRequired(flag); err != nil {
