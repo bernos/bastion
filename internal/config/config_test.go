@@ -19,6 +19,7 @@ func newTestCmd() *cobra.Command {
 	cmd.Flags().String("vpc-id", "", "")
 	cmd.Flags().String("region", "", "")
 	cmd.Flags().String("ami-parameter-store-param-name", "", "")
+	cmd.Flags().String("tags", "", "")
 	return cmd
 }
 
@@ -316,6 +317,92 @@ func TestInitialize_AMIParam_Default(t *testing.T) {
 
 	if cfg.AMIParameterStoreParamName != config.DefaultAMIParameterStoreParamName {
 		t.Errorf("AMIParameterStoreParamName: want %q, got %q", config.DefaultAMIParameterStoreParamName, cfg.AMIParameterStoreParamName)
+	}
+}
+
+func TestInitialize_Tags_FromConfigFile(t *testing.T) {
+	cfgFile := writeTempConfig(t, `
+tags:
+  env: prod
+  team: platform
+`)
+	v := viper.New()
+	v.SetConfigFile(cfgFile)
+
+	cfg := &config.Config{}
+	if err := config.Initialize(cfg, v, newTestCmd()); err != nil {
+		t.Fatal(err)
+	}
+
+	if cfg.Tags["env"] != "prod" {
+		t.Errorf("Tags[env]: want %q, got %q", "prod", cfg.Tags["env"])
+	}
+	if cfg.Tags["team"] != "platform" {
+		t.Errorf("Tags[team]: want %q, got %q", "platform", cfg.Tags["team"])
+	}
+}
+
+func TestInitialize_Tags_FromEnvVar(t *testing.T) {
+	t.Setenv("BASTION_TAGS", "env=staging,owner=sre")
+
+	cfg := &config.Config{}
+	if err := config.Initialize(cfg, viper.New(), newTestCmd()); err != nil {
+		t.Fatal(err)
+	}
+
+	if cfg.Tags["env"] != "staging" {
+		t.Errorf("Tags[env]: want %q, got %q", "staging", cfg.Tags["env"])
+	}
+	if cfg.Tags["owner"] != "sre" {
+		t.Errorf("Tags[owner]: want %q, got %q", "sre", cfg.Tags["owner"])
+	}
+}
+
+func TestInitialize_Tags_FromFlag(t *testing.T) {
+	cmd := newTestCmd()
+	if err := cmd.Flags().Set("tags", "env=prod,team=ops"); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg := &config.Config{}
+	if err := config.Initialize(cfg, viper.New(), cmd); err != nil {
+		t.Fatal(err)
+	}
+
+	if cfg.Tags["env"] != "prod" {
+		t.Errorf("Tags[env]: want %q, got %q", "prod", cfg.Tags["env"])
+	}
+	if cfg.Tags["team"] != "ops" {
+		t.Errorf("Tags[team]: want %q, got %q", "ops", cfg.Tags["team"])
+	}
+}
+
+func TestInitialize_Tags_FlagOverridesEnvVar(t *testing.T) {
+	t.Setenv("BASTION_TAGS", "env=prod")
+
+	cmd := newTestCmd()
+	if err := cmd.Flags().Set("tags", "env=staging"); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg := &config.Config{}
+	if err := config.Initialize(cfg, viper.New(), cmd); err != nil {
+		t.Fatal(err)
+	}
+
+	if cfg.Tags["env"] != "staging" {
+		t.Errorf("Tags[env]: want flag value %q, got %q", "staging", cfg.Tags["env"])
+	}
+}
+
+func TestInitialize_Tags_AbsentIsEmpty(t *testing.T) {
+	cfg := &config.Config{}
+	if err := config.Initialize(cfg, viper.New(), newTestCmd()); err != nil {
+		t.Fatal(err)
+	}
+
+	if len(cfg.Tags) != 0 {
+		t.Errorf("Tags: want empty map, got %v", cfg.Tags)
 	}
 }
 

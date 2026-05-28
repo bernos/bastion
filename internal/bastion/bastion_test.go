@@ -192,6 +192,67 @@ func Test_BastionService_DeployBastion_DefaultsInstanceTypeAndAMI(t *testing.T) 
 	}
 }
 
+func Test_BastionService_DeployBastion_UserTagsAppliedAsStackTags(t *testing.T) {
+	var captured *cloudformationservice.DeployInput
+
+	mock := &mockCloudFormationService{
+		DeployFn: func(_ context.Context, input *cloudformationservice.DeployInput, _ ...func(*cloudformationservice.DeployOptions)) (*cloudformationservice.DeployOutput, error) {
+			captured = input
+			return &cloudformationservice.DeployOutput{}, nil
+		},
+	}
+
+	svc := NewBastionService(mock, nil, nil)
+
+	_, err := svc.DeployBastion(context.Background(), &DeployBastionInput{
+		BastionName: "bastion",
+		SubnetID:    "subnet-000",
+		VPCID:       "vpc-000",
+		Tags:        map[string]string{"env": "prod", "team": "platform"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	tagMap := make(map[string]string, len(captured.Tags))
+	for _, tag := range captured.Tags {
+		tagMap[aws.ToString(tag.Key)] = aws.ToString(tag.Value)
+	}
+
+	if tagMap["env"] != "prod" {
+		t.Errorf("stack tag env: want %q, got %q", "prod", tagMap["env"])
+	}
+	if tagMap["team"] != "platform" {
+		t.Errorf("stack tag team: want %q, got %q", "platform", tagMap["team"])
+	}
+}
+
+func Test_BastionService_DeployBastion_NilTagsProducesEmptyStackTags(t *testing.T) {
+	var captured *cloudformationservice.DeployInput
+
+	mock := &mockCloudFormationService{
+		DeployFn: func(_ context.Context, input *cloudformationservice.DeployInput, _ ...func(*cloudformationservice.DeployOptions)) (*cloudformationservice.DeployOutput, error) {
+			captured = input
+			return &cloudformationservice.DeployOutput{}, nil
+		},
+	}
+
+	svc := NewBastionService(mock, nil, nil)
+
+	_, err := svc.DeployBastion(context.Background(), &DeployBastionInput{
+		BastionName: "bastion",
+		SubnetID:    "subnet-000",
+		VPCID:       "vpc-000",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(captured.Tags) != 0 {
+		t.Errorf("stack tags: want empty, got %v", captured.Tags)
+	}
+}
+
 func Test_BastionService_DeleteBastion_Success(t *testing.T) {
 	var deletedStack string
 

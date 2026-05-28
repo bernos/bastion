@@ -32,6 +32,7 @@ func NewUpCommand(cfg *config.Config) (*cobra.Command, error) {
 				SubnetID:         cfg.SubnetID,
 				VPCID:            cfg.VPCID,
 				AMIParameterName: cfg.AMIParameterStoreParamName,
+				Tags:             cfg.Tags,
 			})
 		},
 	}
@@ -42,6 +43,8 @@ func NewUpCommand(cfg *config.Config) (*cobra.Command, error) {
 	cmd.Flags().String("vpc-id", "", "VPC ID for the bastion security group")
 	cmd.Flags().String("region", "", "AWS region to deploy the bastion into")
 	cmd.Flags().String("ami-parameter-store-param-name", "", "SSM parameter store path for the bastion AMI ID")
+
+	cmd.Flags().String("tags", "", "additional tags to apply to the CloudFormation stack (key1=value1,key2=value2,...); max 50 tags")
 
 	for _, flag := range []string{"name", "owner", "subnet-id", "vpc-id", "region"} {
 		if err := cmd.MarkFlagRequired(flag); err != nil {
